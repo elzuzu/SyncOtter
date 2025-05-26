@@ -1,0 +1,51 @@
+{
+  "_comments": {
+    "note": "Template de configuration SyncOtter",
+    "usage": "Copiez ce fichier en 'config.json' à côté de l'exe",
+    "paths": "Utilisez des double backslashes (\\\\) pour Windows"
+  },
+  
+  "sourceDirectory": "C:\\Source",
+  "targetDirectory": "C:\\Target",
+  
+  "excludeDirectories": [
+    ".git",
+    "node_modules", 
+    ".vs",
+    ".vscode",
+    "bin",
+    "obj",
+    "temp",
+    "cache"
+  ],
+  
+  "excludePatterns": [
+    "*.tmp",
+    "*.log",
+    "*.cache",
+    "Thumbs.db",
+    ".DS_Store"
+  ],
+  
+  "executeAfterSync": "C:\\Target\\app.exe",
+  "appName": "Mon Application",
+  "appDescription": "Synchronisation et lancement automatique",
+  "parallelCopies": 4,
+  
+  "_examples": {
+    "network_source": "\\\\server\\shared\\source",
+    "multiple_apps": {
+      "executeAfterSync": "C:\\Target\\launcher.bat",
+      "appName": "Suite d'Applications",
+      "appDescription": "Lancement multiple via batch"
+    },
+    "high_performance": {
+      "parallelCopies": 16,
+      "appDescription": "Mode haute performance (SSD/NVMe)"
+    },
+    "development": {
+      "excludeDirectories": [".git", ".vs", "bin\\Debug", "obj\\Debug"],
+      "appDescription": "Synchronisation développement"
+    }
+  }
+}
