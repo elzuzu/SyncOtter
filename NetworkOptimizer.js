@@ -1,7 +1,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 function isUNCPath(p) {
   return /^\\\\/.test(p);
@@ -11,12 +11,15 @@ function extractHost(uncPath) {
   return uncPath.replace(/^\\\\/, '').split('\\')[0];
 }
 
-async function pingHost(host) {
+async function pingHost(host, timeout = 5000) {
   return new Promise((resolve) => {
     if (!host) return resolve(null);
     const cmd = process.platform === 'win32' ? `ping -n 3 ${host}` : `ping -c 3 ${host}`;
-    exec(cmd, (err, stdout) => {
-      if (err) return resolve(null);
+    exec(cmd, { timeout }, (err, stdout) => {
+      if (err) {
+        console.error(`ping error for ${host}:`, err.message);
+        return resolve(null);
+      }
       const regexWin = /Average = ([0-9]+)ms/;
       const regexUnix = /= ([0-9.]+)\/\d+\/\d+/;
       let match = stdout.match(regexWin);
@@ -30,14 +33,19 @@ async function pingHost(host) {
 async function detectNetworkInfo(uncPath) {
   if (!isUNCPath(uncPath)) return null;
   const host = extractHost(uncPath);
-  const latency = await pingHost(host);
-  let type = 'UNKNOWN';
-  if (latency != null) {
-    if (latency < 10) type = 'LAN';
-    else if (latency < 100) type = 'VPN';
-    else type = 'WAN';
+  try {
+    const latency = await pingHost(host);
+    let type = 'UNKNOWN';
+    if (latency != null) {
+      if (latency < 10) type = 'LAN';
+      else if (latency < 100) type = 'VPN';
+      else type = 'WAN';
+    }
+    return { host, latencyMs: latency, type };
+  } catch (e) {
+    console.error('detectNetworkInfo error:', e.message);
+    return { host, latencyMs: null, type: 'UNKNOWN' };
   }
-  return { host, latencyMs: latency, type };
 }
 
 function applyNetworkOptimizations(config, networkInfo) {
@@ -53,30 +61,40 @@ function applyNetworkOptimizations(config, networkInfo) {
 function relaunchFromTempIfNeeded() {
   const exePath = process.execPath;
   if (!isUNCPath(exePath) || process.env.SYNCOTTER_TEMP) return;
-  const tempDir = path.join(os.tmpdir(), `SyncOtter-${Date.now()}`);
-  fs.ensureDirSync(tempDir);
-  const exeName = path.basename(exePath);
-  const destExe = path.join(tempDir, exeName);
-  fs.copySync(exePath, destExe);
-  const configPath = path.join(path.dirname(exePath), 'config.json');
-  if (fs.existsSync(configPath)) {
-    fs.copySync(configPath, path.join(tempDir, 'config.json'));
+  if (exePath.startsWith(os.tmpdir())) return; // avoid recursive relaunch
+  try {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'SyncOtter-'));
+    const exeName = path.basename(exePath);
+    const destExe = path.join(tempDir, exeName);
+    fs.copyFileSync(exePath, destExe);
+    const configPath = path.join(path.dirname(exePath), 'config.json');
+    if (fs.existsSync(configPath)) {
+      fs.copyFileSync(configPath, path.join(tempDir, 'config.json'));
+    }
+    const args = process.argv.slice(1);
+    console.log(`Relaunching from temp: ${destExe}`);
+    const child = spawn(destExe, args, {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, SYNCOTTER_TEMP: tempDir }
+    });
+    child.unref();
+    process.exit(0);
+  } catch (err) {
+    console.error('Failed to relaunch from temp:', err.message);
   }
-  const args = process.argv.slice(1);
-  const child = require('child_process').spawn(destExe, args, {
-    detached: true,
-    stdio: 'ignore',
-    env: { ...process.env, SYNCOTTER_TEMP: tempDir }
-  });
-  child.unref();
-  process.exit(0);
 }
 
 function registerTempCleanup(app) {
   const dir = process.env.SYNCOTTER_TEMP;
   if (!dir) return;
   app.on('quit', () => {
-    try { fs.removeSync(dir); } catch (e) { /* ignore */ }
+    try {
+      fs.removeSync(dir);
+      console.log(`Cleaned temp dir ${dir}`);
+    } catch (e) {
+      console.error('Temp cleanup error:', e.message);
+    }
   });
 }
 
