@@ -1,4 +1,4 @@
-﻿# Script de build pour SyncOtter
+# Script de build pour SyncOtter
 param(
     [switch]$Clean = $true,
     [switch]$InstallDeps = $false,
