@@ -1,4 +1,4 @@
-# Script de build pour SyncOtter
+﻿# Script de build pour SyncOtter
 param(
     [switch]$Clean = $true,
     [switch]$InstallDeps = $false,
@@ -81,10 +81,13 @@ function Test-IsAdmin {
 # Nettoyage agressif du cache electron-builder
 function Clean-ElectronBuilderCache {
     Write-ColorText "`n🧹 Nettoyage cache electron-builder..." $Yellow
-    $paths = @(
-        Join-Path $env:USERPROFILE ".cache\electron-builder",
-        Join-Path $env:LOCALAPPDATA "electron-builder\cache"
-    )
+    $paths = @()
+    if ($env:USERPROFILE) {
+        $paths += Join-Path -Path $env:USERPROFILE -ChildPath ".cache\electron-builder"
+    }
+    if ($env:LOCALAPPDATA) {
+        $paths += Join-Path -Path $env:LOCALAPPDATA -ChildPath "electron-builder\cache"
+    }
     foreach ($p in $paths) {
         if (Test-Path $p) {
             try {
@@ -396,7 +399,7 @@ module.exports = { Logger };
 } finally {
     Pop-Location
     Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
-    if(Test-Path $backupPath -and -not $Recovery){
+    if (Test-Path $backupPath -and -not $Recovery) {
         Remove-Item $backupPath -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
