@@ -1,0 +1,20 @@
+{
+  "name": "syncotter-cli",
+  "version": "1.0.0",
+  "description": "Version CLI de SyncOtter",
+  "main": "src/cli-main.js",
+  "bin": "src/cli-main.js",
+  "scripts": {
+    "build": "pkg -C GZip -t node18-win-x64 src/cli-main.js --out-path dist"
+  },
+  "dependencies": {
+    "fs-extra": "^11.2.0",
+    "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0",
+    "yargs": "^17.7.2"
+  },
+  "pkg": {
+    "assets": ["config.json"],
+    "outputPath": "dist"
+  }
+}
