@@ -213,6 +213,13 @@ npm start
 }
 ```
 
+## 📈 Monitoring & Analytics
+
+- Collecte temps réel des métriques (latence, throughput, erreurs)
+- Logs JSON dans le dossier `logs/` avec rotation automatique
+- Rapports générés dans `reports/`
+- Rapport santé système au démarrage
+
 ## 🔄 **Structure de Déploiement :**
 
 ```
