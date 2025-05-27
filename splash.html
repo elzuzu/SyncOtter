@@ -229,80 +229,85 @@
     <div class="progress-details" id="progressDetails"></div>
 
     <script>
-        // Vérifier que l'environnement Electron est disponible
-        if (typeof require !== 'undefined') {
-            try {
-                const { ipcRenderer } = require('electron');
-                
-                const statusEl = document.getElementById('status');
-                const progressContainer = document.getElementById('progressContainer');
-                const progressBar = document.getElementById('progressBar');
-                const progressDetails = document.getElementById('progressDetails');
-                const appInfo = document.getElementById('appInfo');
-                const appNameText = document.getElementById('appNameText');
-                const appDescription = document.getElementById('appDescription');
-
-                // Écouter les informations de l'application
-                ipcRenderer.on('app-info', (event, data) => {
-                    if (data.appName) {
-                        appNameText.textContent = data.appName;
-                        appDescription.textContent = data.appDescription || 'Prêt pour le lancement';
-                        appInfo.classList.add('visible');
-                    } else if (data.executeAfterSync) {
-                        // Fallback: utiliser le nom de l'exe
-                        const exeName = data.executeAfterSync.split('\\').pop().replace('.exe', '');
-                        appNameText.textContent = exeName;
-                        appDescription.textContent = 'Application détectée automatiquement';
-                        appInfo.classList.add('visible');
-                    }
-                    // Si pas d'app à lancer, on cache la section
-                });
-
-                // Écouter les mises à jour de statut
-                ipcRenderer.on('update-status', (event, message) => {
-                    statusEl.textContent = message;
-                    
-                    // Styling conditionnel selon le message
-                    statusEl.className = 'status-text';
-                    if (message.includes('❌') || message.includes('Erreur')) {
-                        statusEl.classList.add('error');
-                    } else if (message.includes('✅') || message.includes('Terminé')) {
-                        statusEl.classList.add('success');
-                    } else if (message.includes('⚠️') || message.includes('fermé') || message.includes('Aucun')) {
-                        statusEl.classList.add('warning');
-                    }
-                });
-
-                // Écouter les mises à jour de progression
-                ipcRenderer.on('update-progress', (event, data) => {
-                    progressContainer.classList.add('visible');
-                    progressBar.style.width = data.progress + '%';
-                    
-                    statusEl.textContent = `Synchronisation en cours...`;
-                    progressDetails.textContent = `${data.current}/${data.total} • ${data.fileName} • ${data.copied} copiés`;
-                    
-                    if (data.progress >= 100) {
-                        statusEl.textContent = `✅ Terminé ! ${data.copied} fichiers synchronisés`;
-                        progressDetails.textContent = '';
-                    }
-                });
-
-                ipcRenderer.on('telemetry-summary', (event, data) => {
-                    const summary = `Temps: ${Math.round(data.durationMs/1000)}s • Fichiers: ${data.filesCopied} • Erreurs: ${data.errors}`;
-                    const summaryEl = document.createElement('div');
-                    summaryEl.textContent = summary;
-                    summaryEl.style.fontSize = '12px';
-                    summaryEl.style.marginTop = '8px';
-                    document.body.appendChild(summaryEl);
-                });
-            } catch (error) {
-                console.error('Erreur IPC:', error);
-                document.getElementById('status').textContent = 'Erreur de communication...';
+        window.addEventListener('DOMContentLoaded', () => {
+            let ipcRenderer;
+            if (typeof require !== 'undefined') {
+                try {
+                    ({ ipcRenderer } = require('electron'));
+                } catch (err) {
+                    console.error('Chargement IPC échoué:', err);
+                }
             }
-        } else {
-            console.error('Environnement Electron non détecté');
-            document.getElementById('status').textContent = 'Erreur: require non disponible';
-        }
+
+            if (!ipcRenderer) {
+                console.error('Environnement Electron non détecté');
+                document.getElementById('status').textContent = 'Erreur: IPC indisponible';
+                return;
+            }
+
+            const statusEl = document.getElementById('status');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressDetails = document.getElementById('progressDetails');
+            const appInfo = document.getElementById('appInfo');
+            const appNameText = document.getElementById('appNameText');
+            const appDescription = document.getElementById('appDescription');
+
+            const safeOn = (channel, handler) => {
+                try {
+                    ipcRenderer.on(channel, (event, data) => {
+                        try { handler(data); } catch (err) { console.error('Handler error', err); }
+                    });
+                } catch (err) {
+                    console.error('Erreur ajout listener', err);
+                }
+            };
+
+            safeOn('app-info', (data) => {
+                if (data.appName) {
+                    appNameText.textContent = data.appName;
+                    appDescription.textContent = data.appDescription || 'Prêt pour le lancement';
+                    appInfo.classList.add('visible');
+                } else if (data.executeAfterSync) {
+                    const exeName = data.executeAfterSync.split('\\').pop().replace('.exe', '');
+                    appNameText.textContent = exeName;
+                    appDescription.textContent = 'Application détectée automatiquement';
+                    appInfo.classList.add('visible');
+                }
+            });
+
+            safeOn('update-status', (message) => {
+                statusEl.textContent = message;
+                statusEl.className = 'status-text';
+                if (message.includes('❌') || message.includes('Erreur')) {
+                    statusEl.classList.add('error');
+                } else if (message.includes('✅') || message.includes('Terminé')) {
+                    statusEl.classList.add('success');
+                } else if (message.includes('⚠️') || message.includes('fermé') || message.includes('Aucun')) {
+                    statusEl.classList.add('warning');
+                }
+            });
+
+            safeOn('update-progress', (data) => {
+                progressContainer.classList.add('visible');
+                progressBar.style.width = data.progress + '%';
+                statusEl.textContent = 'Synchronisation en cours...';
+                progressDetails.textContent = `${data.current}/${data.total} • ${data.fileName} • ${data.copied} copiés`;
+                if (data.progress >= 100) {
+                    statusEl.textContent = `✅ Terminé ! ${data.copied} fichiers synchronisés`;
+                    progressDetails.textContent = '';
+                }
+            });
+
+            safeOn('telemetry-summary', (data) => {
+                const summary = `Temps: ${Math.round(data.durationMs/1000)}s • Fichiers: ${data.filesCopied} • Erreurs: ${data.errors}`;
+                const summaryEl = document.createElement('div');
+                summaryEl.textContent = summary;
+                summaryEl.style.fontSize = '12px';
+                summaryEl.style.marginTop = '8px';
+                document.body.appendChild(summaryEl);
+            });
+        });
     </script>
 </body>
 </html>

@@ -31,19 +31,48 @@ const analytics = new AnalyticsEngine();
 const reportGenerator = new ReportGenerator();
 const logger = new AdvancedLogger();
 
+const IPC_MAX_RETRIES = 3;
+function safeSend(channel, data, attempt = 0) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.webContents.send(channel, data);
+  } catch (err) {
+    if (attempt < IPC_MAX_RETRIES) {
+      setTimeout(() => safeSend(channel, data, attempt + 1), 200);
+    } else {
+      console.error(`IPC send failed for ${channel}:`, err);
+    }
+  }
+}
+
+let shuttingDown = false;
+function gracefulShutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    telemetry?.finish();
+    if (telemetry) analytics.addMetrics(telemetry.metrics);
+    reportGenerator.generate({ metrics: telemetry?.metrics || {}, health: HealthChecker.basicReport(config) });
+  } catch (err) {
+    console.error('Erreur lors du graceful shutdown:', err);
+  }
+  app.quit();
+}
+
+ipcMain.on('request-shutdown', gracefulShutdown);
+
 // Vérifier et tuer les processus SyncOtter existants
 async function killExistingProcesses() {
   return new Promise((resolve) => {
     const currentPid = process.pid;
+    const exePath = process.execPath.toLowerCase();
 
     exec('tasklist /FI "IMAGENAME eq SyncOtter*" /FO CSV', (error, stdout) => {
       if (error || !stdout.includes('SyncOtter')) {
-        resolve(false); // Pas de processus existant
-        return;
+        return resolve(false); // Pas de processus existant
       }
 
-      // Parser la sortie CSV pour extraire les PIDs
-      const lines = stdout.split('\n').slice(1); // Ignorer l'en-tête
+      const lines = stdout.split('\n').slice(1);
       const processes = lines
         .filter(line => line.includes('SyncOtter'))
         .map(line => {
@@ -53,24 +82,38 @@ async function killExistingProcesses() {
             pid: parseInt(parts[1]) || 0
           };
         })
-        .filter(proc => proc.pid && proc.pid !== currentPid); // Exclure le processus actuel
+        .filter(proc => proc.pid && proc.pid !== currentPid);
 
       if (processes.length === 0) {
-        resolve(false); // Pas d'autres processus
-        return;
+        return resolve(false);
       }
 
-      console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
-      logger.log('info', 'Instance existante détectée, arrêt en cours');
+      const checks = processes.map(p => new Promise(res => {
+        exec(`wmic process where processid=${p.pid} get CommandLine /FORMAT:CSV`, (e, out) => {
+          if (!e && out.toLowerCase().includes(exePath)) {
+            res(p.pid);
+          } else {
+            res(null);
+          }
+        });
+      }));
 
-      // Tuer seulement les autres processus
-      const pidsToKill = processes.map(p => p.pid).join(' ');
-      exec(`taskkill /F /PID ${pidsToKill}`, (killError) => {
-        if (!killError) {
-          console.log('✅ Processus existants fermés');
-          logger.log('info', 'Processus existants fermés');
+      Promise.all(checks).then(validPids => {
+        const pidsToKill = validPids.filter(Boolean);
+        if (pidsToKill.length === 0) {
+          return resolve(false);
         }
-        setTimeout(() => resolve(true), 500);
+
+        console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
+        logger.log('info', 'Instance existante détectée, arrêt en cours');
+
+        exec(`taskkill /F /PID ${pidsToKill.join(' ')}`, (killError) => {
+          if (!killError) {
+            console.log('✅ Processus existants fermés');
+            logger.log('info', 'Processus existants fermés');
+          }
+          setTimeout(() => resolve(true), 500);
+        });
       });
     });
   });
@@ -138,7 +181,7 @@ async function loadConfig() {
       console.error('💡 Solution: Placez config.json à côté de l\'exe SyncOtter');
     }
 
-    app.quit();
+    gracefulShutdown();
   }
 }
 
@@ -234,20 +277,20 @@ async function performSync() {
     telemetry = new TelemetryCollector({ granularity: config.telemetryGranularity });
     telemetry.on('metric', (m) => logger.log('debug', 'metric', m));
     logger.log('info', 'Début de la synchronisation');
-    mainWindow.webContents.send('update-status', 'Vérification des répertoires...');
+    safeSend('update-status', 'Vérification des répertoires...');
 
     await ensureDirectories();
 
     const cache = await CacheManager.loadCache();
 
-    mainWindow.webContents.send('update-status', 'Analyse des fichiers...');
+    safeSend('update-status', 'Analyse des fichiers...');
 
     const sourceFiles = await scanSourceFiles();
     console.log(`📁 ${sourceFiles.length} fichiers trouvés`);
 
     if (sourceFiles.length === 0) {
-      mainWindow.webContents.send('update-status', '⚠️ Aucun fichier à synchroniser');
-      setTimeout(() => app.quit(), 2000);
+      safeSend('update-status', '⚠️ Aucun fichier à synchroniser');
+      setTimeout(() => gracefulShutdown(), 2000);
       return;
     }
 
@@ -263,7 +306,7 @@ async function performSync() {
         const progress = Math.round((completed / sourceFiles.length) * 100);
         const fileName = path.basename(file);
 
-        mainWindow.webContents.send('update-progress', {
+        safeSend('update-progress', {
           progress,
           current: completed,
           total: sourceFiles.length,
@@ -288,31 +331,39 @@ async function performSync() {
     const reportFile = reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
     logger.log('info', `Rapport généré: ${reportFile}`);
     logger.log('info', `Synchronisation terminée: ${copied} fichiers`);
-    mainWindow.webContents.send('telemetry-summary', telemetry.metrics);
+    safeSend('telemetry-summary', telemetry.metrics);
     CacheManager.evictCache(cache);
     await CacheManager.saveCache(cache);
 
-    if (config.executeAfterSync) {
+    if (config.executeAfterSync && fs.existsSync(config.executeAfterSync)) {
       const appDisplayName = config.appName || path.basename(config.executeAfterSync, '.exe');
-      mainWindow.webContents.send('update-status', `🚀 Lancement: ${appDisplayName}`);
+      safeSend('update-status', `🚀 Lancement: ${appDisplayName}`);
       setTimeout(() => {
         console.log(`🚀 Lancement: ${config.executeAfterSync}`);
-        spawn(config.executeAfterSync, [], { detached: true });
-        app.quit();
+        try {
+          spawn(config.executeAfterSync, [], { detached: true });
+        } catch (e) {
+          console.error('Erreur lancement application:', e);
+        }
+        gracefulShutdown();
       }, 1500);
     } else {
-      mainWindow.webContents.send('update-status', '✅ Synchronisation terminée');
-      setTimeout(() => app.quit(), 2000);
+      if (config.executeAfterSync) {
+        safeSend('update-status', '⚠️ Application introuvable');
+      } else {
+        safeSend('update-status', '✅ Synchronisation terminée');
+      }
+      setTimeout(() => gracefulShutdown(), 2000);
     }
 
   } catch (error) {
     console.error('❌ Erreur synchronisation:', error);
-    mainWindow.webContents.send('update-status', `❌ Erreur: ${error.message}`);
+    safeSend('update-status', `❌ Erreur: ${error.message}`);
     telemetry.recordError();
     telemetry.finish();
     analytics.addMetrics(telemetry.metrics);
     reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
-    setTimeout(() => app.quit(), 3000);
+    setTimeout(() => gracefulShutdown(), 3000);
   }
 }
 
@@ -328,13 +379,13 @@ app.whenReady().then(async () => {
 
   const health = HealthChecker.basicReport(config);
   logger.log('info', 'Health check', health);
-  mainWindow.webContents.send('health-report', health);
+  safeSend('health-report', health);
 
   NetworkOptimizer.registerTempCleanup(app);
 
   if (hadExistingProcess) {
     setTimeout(() => {
-      mainWindow.webContents.send('update-status', '🔄 Processus précédent fermé...');
+      safeSend('update-status', '🔄 Processus précédent fermé...');
     }, 200);
   }
 
@@ -344,13 +395,17 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  app.quit();
+  gracefulShutdown();
+});
+
+app.on('before-quit', () => {
+  if (!shuttingDown) gracefulShutdown();
 });
 
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  app.quit();
+  gracefulShutdown();
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
