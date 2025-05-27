@@ -31,6 +31,7 @@
   "appName": "Mon Application",
   "appDescription": "Synchronisation et lancement automatique",
   "parallelCopies": 4,
+  "telemetryGranularity": "summary",
   
   "_examples": {
     "network_source": "\\\\server\\shared\\source",

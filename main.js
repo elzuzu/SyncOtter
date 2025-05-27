@@ -3,6 +3,11 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, exec } = require('child_process');
+const TelemetryCollector = require('./monitoring/TelemetryCollector');
+const AnalyticsEngine = require('./monitoring/AnalyticsEngine');
+const ReportGenerator = require('./monitoring/ReportGenerator');
+const HealthChecker = require('./monitoring/HealthChecker');
+const AdvancedLogger = require('./logger/AdvancedLogger');
 const versionManager = require('./version-manager');
 
 // Modules d'optimisation réseau
@@ -21,6 +26,10 @@ app.commandLine.appendSwitch('--disable-web-security');
 
 let mainWindow;
 let config;
+let telemetry;
+const analytics = new AnalyticsEngine();
+const reportGenerator = new ReportGenerator();
+const logger = new AdvancedLogger();
 
 // Vérifier et tuer les processus SyncOtter existants
 async function killExistingProcesses() {
@@ -32,13 +41,15 @@ async function killExistingProcesses() {
       }
 
       console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
+      logger.log('info', 'Instance existante détectée, arrêt en cours');
 
       exec('taskkill /F /IM "SyncOtter*" /T', (killError) => {
         if (!killError) {
           console.log('✅ Processus existants fermés');
+          logger.log('info', 'Processus existants fermés');
         }
         // Attendre un peu pour être sûr
-        setTimeout(() => resolve(true), 1000);
+        setTimeout(() => resolve(true), 500);
       });
     });
   });
@@ -186,10 +197,12 @@ async function copyFileIfNeeded(sourceFile, cache) {
     }
     await TransferManager.transferFile(sourceFile, targetFile, { rateLimit: config.rateLimit });
     CacheManager.updateCacheEntry(cache, sourceFile, stat);
+    telemetry.recordFileCopied(stat.size);
     return true;
 
   } catch (error) {
     console.error(`Erreur copie ${sourceFile}:`, error);
+    telemetry.recordError();
     return false;
   }
 }
@@ -197,6 +210,9 @@ async function copyFileIfNeeded(sourceFile, cache) {
 async function performSync() {
   try {
     console.log('🦦 Début de la synchronisation...');
+    telemetry = new TelemetryCollector({ granularity: config.telemetryGranularity });
+    telemetry.on('metric', (m) => logger.log('debug', 'metric', m));
+    logger.log('info', 'Début de la synchronisation');
     mainWindow.webContents.send('update-status', 'Vérification des répertoires...');
 
     await ensureDirectories();
@@ -236,6 +252,7 @@ async function performSync() {
       });
 
       await Promise.all(promises);
+      telemetry.recordBatch();
     }
 
     const batchSize = config.parallelCopies || 4;
@@ -245,6 +262,12 @@ async function performSync() {
     }
 
     console.log(`✅ Synchronisation terminée: ${copied} fichiers copiés`);
+    telemetry.finish();
+    analytics.addMetrics(telemetry.metrics);
+    const reportFile = reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
+    logger.log('info', `Rapport généré: ${reportFile}`);
+    logger.log('info', `Synchronisation terminée: ${copied} fichiers`);
+    mainWindow.webContents.send('telemetry-summary', telemetry.metrics);
     CacheManager.evictCache(cache);
     await CacheManager.saveCache(cache);
 
@@ -264,6 +287,10 @@ async function performSync() {
   } catch (error) {
     console.error('❌ Erreur synchronisation:', error);
     mainWindow.webContents.send('update-status', `❌ Erreur: ${error.message}`);
+    telemetry.recordError();
+    telemetry.finish();
+    analytics.addMetrics(telemetry.metrics);
+    reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
     setTimeout(() => app.quit(), 3000);
   }
 }
@@ -277,6 +304,10 @@ app.whenReady().then(async () => {
   const hadExistingProcess = await killExistingProcesses();
 
   createSplashWindow();
+
+  const health = HealthChecker.basicReport(config);
+  logger.log('info', 'Health check', health);
+  mainWindow.webContents.send('health-report', health);
 
   NetworkOptimizer.registerTempCleanup(app);
 
