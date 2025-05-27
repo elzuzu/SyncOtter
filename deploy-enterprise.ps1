@@ -13,9 +13,15 @@ function Get-Version {
 
 function Deploy {
     $version = Get-Version
+    # Chercher l'exe généré dynamiquement
+    $exeFiles = Get-ChildItem "$SourceDir\dist" -Filter "*.exe" -ErrorAction SilentlyContinue
+    if (-not $exeFiles) {
+        throw "Aucun fichier .exe trouvé dans $SourceDir\dist"
+    }
+    $sourceExe = $exeFiles | Select-Object -First 1
     $target = Join-Path $DestinationPath "SyncOtter-$version.exe"
-    Write-Host "Copying build to $target" -ForegroundColor Cyan
-    Copy-Item "$SourceDir\dist\SyncOtter-Ultra.exe" $target -Force
+    Write-Host "Copying $($sourceExe.Name) to $target" -ForegroundColor Cyan
+    Copy-Item $sourceExe.FullName $target -Force
     Copy-Item "$SourceDir\config.json" (Join-Path $DestinationPath 'config.json') -Force
     Set-Content -Path (Join-Path $DestinationPath 'current.txt') -Value $version
     Write-Host "Deployment complete" -ForegroundColor Green

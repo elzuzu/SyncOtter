@@ -13,6 +13,7 @@
     "build-ultra": "npx @electron/packager . SyncOtter --platform=win32 --arch=x64 --out=dist --overwrite --ignore=\"(node_modules/\\.bin|\\.git|\\.vscode|\\.tmp|dist|build)\" --prune=true",
     "build-ultra-webpack": "node build-ultra.js",
     "build-packager": "npx @electron/packager . SyncOtter --platform=win32 --arch=x64 --out=release-builds --overwrite",
+    "build-cli": "pkg -C GZip -t node18-win-x64 src/cli-main.js --out-path dist",
     "prebuild": "npm run compile-preload",
     "compile-preload": "tsc src/preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node",
     "clean": "rimraf dist build out release-builds .vite node_modules/.cache",

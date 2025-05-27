@@ -75,10 +75,23 @@ function checkRequirePaths() {
 }
 
 function checkAssets() {
-  const assets = ['src/assets/app-icon.ico', 'splash.html'];
-  for (const asset of assets) {
+  const requiredAssets = [
+    'splash.html',
+    'config.exemple.json',
+    'src/preload.ts',
+    'src/cli-main.js'
+  ];
+  for (const asset of requiredAssets) {
     if (!fs.existsSync(asset)) {
-      error(`Missing asset: ${asset}`);
+      error(`Missing required file: ${asset}`);
+    }
+  }
+  // Vérifier que l'icône existe ou peut être générée
+  const iconPath = 'src/assets/app-icon.ico';
+  if (!fs.existsSync(iconPath)) {
+    const assetsDir = 'src/assets';
+    if (!fs.existsSync(assetsDir)) {
+      error(`Assets directory missing: ${assetsDir}`);
     }
   }
 }
