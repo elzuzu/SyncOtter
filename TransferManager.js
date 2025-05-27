@@ -15,32 +15,66 @@ class Throttle extends Transform {
     this.last = Date.now();
   }
   _transform(chunk, enc, cb) {
-    const now = Date.now();
-    const elapsed = now - this.last;
-    this.remaining -= elapsed * this.rate / 1000;
-    if (this.remaining < 0) this.remaining = 0;
-    this.remaining += chunk.length;
-    this.last = now;
-    const delay = this.remaining / this.rate * 1000;
-    setTimeout(() => cb(null, chunk), delay);
+    try {
+      const now = Date.now();
+      const elapsed = now - this.last;
+      this.remaining -= elapsed * this.rate / 1000;
+      if (this.remaining < 0) this.remaining = 0;
+      this.remaining += chunk.length;
+      this.last = now;
+      const delay = this.remaining / this.rate * 1000;
+      setTimeout(() => cb(null, chunk), delay);
+    } catch (err) {
+      cb(err);
+    }
   }
 }
 
 async function compressCopy(src, dest) {
   const temp = dest + '.gz';
-  await pump(fs.createReadStream(src), zlib.createGzip(), fs.createWriteStream(temp));
-  await pump(fs.createReadStream(temp), zlib.createGunzip(), fs.createWriteStream(dest));
-  await fs.remove(temp);
+  const read1 = fs.createReadStream(src);
+  const gzip = zlib.createGzip();
+  const writeTemp = fs.createWriteStream(temp);
+  try {
+    await pump(read1, gzip, writeTemp);
+    const read2 = fs.createReadStream(temp);
+    const gunzip = zlib.createGunzip();
+    const writeDest = fs.createWriteStream(dest);
+    try {
+      await pump(read2, gunzip, writeDest);
+    } finally {
+      try { read2.destroy(); } catch {}
+      try { gunzip.destroy(); } catch {}
+      try { writeDest.destroy(); } catch {}
+    }
+  } catch (err) {
+    try { read1.destroy(); } catch {}
+    try { gzip.destroy(); } catch {}
+    try { writeTemp.destroy(); } catch {}
+    throw err;
+  } finally {
+    try { read1.destroy(); } catch {}
+    try { gzip.destroy(); } catch {}
+    try { writeTemp.destroy(); } catch {}
+    try { await fs.remove(temp); } catch {}
+  }
 }
 
 async function chunkedCopy(src, dest, opts = {}) {
   const { chunkSize = 8 * 1024 * 1024, rateLimit } = opts;
   const read = fs.createReadStream(src, { highWaterMark: chunkSize });
   const write = fs.createWriteStream(dest);
-  const streams = [read];
-  if (rateLimit) streams.push(new Throttle(rateLimit));
-  streams.push(write);
-  await pump(...streams);
+  const throttle = rateLimit ? new Throttle(rateLimit) : null;
+  try {
+    const streams = throttle ? [read, throttle, write] : [read, write];
+    await pump(...streams);
+  } catch (err) {
+    throw err;
+  } finally {
+    try { read.destroy(); } catch {}
+    if (throttle) try { throttle.destroy(); } catch {}
+    try { write.destroy(); } catch {}
+  }
 }
 
 async function transferFile(src, dest, opts = {}) {
