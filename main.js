@@ -4,6 +4,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, exec } = require('child_process');
 
+// Modules d'optimisation réseau
+const NetworkOptimizer = require('./NetworkOptimizer');
+const TransferManager = require('./TransferManager');
+const CacheManager = require('./CacheManager');
+const ErrorRecovery = require('./ErrorRecovery');
+
+// Relance depuis le dossier temporaire si besoin
+NetworkOptimizer.relaunchFromTempIfNeeded();
+
 // Désactiver les warnings et optimiser les performances
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 app.commandLine.appendSwitch('--no-sandbox');
@@ -58,7 +67,7 @@ async function ensureDirectories() {
 }
 
 // Charger la configuration externe (optimisé)
-function loadConfig() {
+async function loadConfig() {
   try {
     let configPath;
     
@@ -80,6 +89,19 @@ function loadConfig() {
     
     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     console.log('✅ Configuration chargée');
+
+    const unc = NetworkOptimizer.isUNCPath(config.sourceDirectory)
+      ? config.sourceDirectory
+      : NetworkOptimizer.isUNCPath(config.targetDirectory)
+        ? config.targetDirectory
+        : null;
+    if (unc) {
+      const info = await NetworkOptimizer.detectNetworkInfo(unc);
+      if (info) {
+        console.log(`🌐 Réseau ${info.type} - ${info.latencyMs || '?'}ms`);
+        config = NetworkOptimizer.applyNetworkOptimizations(config, info);
+      }
+    }
     
   } catch (error) {
     console.error('❌ Erreur config.json:', error.message);
@@ -199,29 +221,25 @@ async function scanSourceFiles() {
   return files;
 }
 
-// Copier un fichier avec vérification hash
-async function copyFileIfNeeded(sourceFile) {
+// Copier un fichier avec stratégies avancées
+async function copyFileIfNeeded(sourceFile, cache) {
   const relativePath = path.relative(config.sourceDirectory, sourceFile);
   const targetFile = path.join(config.targetDirectory, relativePath);
-  
+
   try {
-    // Créer le répertoire cible si nécessaire
     await fs.ensureDir(path.dirname(targetFile));
-    
-    // Vérifier si le fichier existe et s'il est identique
+    const stat = await fs.stat(sourceFile);
+
     if (await fs.pathExists(targetFile)) {
-      const sourceHash = await getFileHash(sourceFile);
-      const targetHash = await getFileHash(targetFile);
-      
-      if (sourceHash === targetHash) {
-        return false; // Pas de copie nécessaire
+      if (!CacheManager.needsSync(sourceFile, stat, cache) && await ErrorRecovery.verifyIntegrity(sourceFile, targetFile)) {
+        return false;
       }
     }
-    
-    // Copier le fichier
-    await fs.copy(sourceFile, targetFile);
-    return true; // Fichier copié
-    
+
+    await TransferManager.transferFile(sourceFile, targetFile, { rateLimit: config.rateLimit });
+    CacheManager.updateCacheEntry(cache, sourceFile, stat);
+    return true;
+
   } catch (error) {
     console.error(`Erreur copie ${sourceFile}:`, error);
     return false;
@@ -233,9 +251,11 @@ async function performSync() {
   try {
     console.log('🦦 Début de la synchronisation...');
     mainWindow.webContents.send('update-status', 'Vérification des répertoires...');
-    
+
     // Vérifier et créer les répertoires
     await ensureDirectories();
+
+    const cache = await CacheManager.loadCache();
     
     mainWindow.webContents.send('update-status', 'Analyse des fichiers...');
     
@@ -254,7 +274,7 @@ async function performSync() {
     // Fonction pour traiter un batch de fichiers
     async function processBatch(files) {
       const promises = files.map(async (file) => {
-        const wasCopied = await copyFileIfNeeded(file);
+        const wasCopied = await copyFileIfNeeded(file, cache);
         if (wasCopied) copied++;
         
         completed++;
@@ -281,6 +301,8 @@ async function performSync() {
     }
     
     console.log(`✅ Synchronisation terminée: ${copied} fichiers copiés`);
+    CacheManager.evictCache(cache);
+    await CacheManager.saveCache(cache);
     
     // Lancer l'exécutable si configuré
     if (config.executeAfterSync) {
@@ -305,12 +327,14 @@ async function performSync() {
 
 // Événements Electron (optimisés avec gestion processus)
 app.whenReady().then(async () => {
-  loadConfig();
+  await loadConfig();
   
   // Vérifier et tuer les processus existants
   const hadExistingProcess = await killExistingProcesses();
-  
+
   createSplashWindow();
+
+  NetworkOptimizer.registerTempCleanup(app);
   
   // Message informatif si processus tué
   if (hadExistingProcess) {

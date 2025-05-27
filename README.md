@@ -94,8 +94,12 @@ npm start
 
 ### 🌐 Share réseau :
 - **Copie temporaire** automatique pour accélération
-- **Nettoyage auto** après utilisation  
+- **Nettoyage auto** après utilisation
 - **Lancement quasi-instantané** même sur réseau lent
+- **Détection latence/bande passante** et ajustement dynamique
+- **Transferts intelligents (compression, chunk, parallèle)**
+- **Reprise sur erreur avec vérification d'intégrité**
+- **Cache réseau local pour synchronisation différentielle**
 
 ## ⚙️ Configuration (config.json)
 
