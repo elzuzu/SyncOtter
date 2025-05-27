@@ -14,6 +14,9 @@ param(
     [switch]$HybridMode = $false
 )
 
+# Répertoire du projet
+$projectRoot = $PSScriptRoot
+
 # Couleurs pour les messages
 $Red = [System.ConsoleColor]::Red
 $Green = [System.ConsoleColor]::Green
@@ -47,19 +50,22 @@ function Invoke-WithRetry {
         [switch]$Npm
     )
     $attempt = 0
-    while($attempt -lt 3){
-        try{
+    while ($attempt -lt 3) {
+        try {
+            $global:LASTEXITCODE = 0
             & $Action
-            if($LASTEXITCODE -ne 0){ throw }
-            return
-        }catch{
-            $attempt++
-            Write-Log 'WARN' "Echec $Name tentative $attempt" 'RETRY'
-            Stop-BlockingProcesses
-            if($Npm){ npm cache clean --force | Out-Null }
-            if($attempt -ge 3){ throw }
-            Start-Sleep -Seconds 1
+            if ($LASTEXITCODE -eq 0) { return }
+            $err = "Code $LASTEXITCODE"
+        } catch {
+            $err = $_
         }
+
+        $attempt++
+        Write-Log 'WARN' "Echec $Name tentative $attempt : $err" 'RETRY'
+        Stop-BlockingProcesses
+        if ($Npm) { npm cache clean --force | Out-Null }
+        if ($attempt -ge 3) { throw $err }
+        Start-Sleep -Seconds 1
     }
 }
 
@@ -68,8 +74,8 @@ function Stop-BlockingProcesses {
 }
 
 function Wait-AndCleanupJobs {
-    param([System.Collections.ArrayList]$Jobs)
-    if($Jobs.Count -eq 0){ return }
+    param($Jobs)
+    if(-not $Jobs -or $Jobs.Count -eq 0){ return }
     Wait-Job $Jobs
     foreach($j in $Jobs){
         if($j.State -eq 'Failed'){
@@ -80,7 +86,7 @@ function Wait-AndCleanupJobs {
         Receive-Job $j | Out-Null
         Remove-Job $j
     }
-    $Jobs.Clear()
+    if ($Jobs -is [System.Collections.IList]) { $Jobs.Clear() }
 }
 
 function Write-ColorText($Text, $Color) {
@@ -107,6 +113,9 @@ function Test-IsAdmin {
 # Nettoyage agressif du cache electron-builder
 function Clean-ElectronBuilderCache {
     Write-ColorText "`n🧹 Nettoyage cache electron-builder..." $Yellow
+    if (-not (Test-IsAdmin)) {
+        Write-ColorText "   ⚠️ Certains fichiers peuvent nécessiter les droits administrateur" $Yellow
+    }
     $paths = @()
     if ($env:USERPROFILE) {
         $paths += Join-Path -Path $env:USERPROFILE -ChildPath ".cache\electron-builder"
@@ -128,10 +137,15 @@ function Clean-ElectronBuilderCache {
 # Vérification de l'état npm
 function Test-NpmHealth {
     try {
-        npm ls --depth=0 --json | Out-Null
-        if ($LASTEXITCODE -ne 0) { return $false }
+        $output = npm ls --depth=0 --json 2>&1
+        $code = $LASTEXITCODE
+        if ($code -ne 0) {
+            Write-Log 'WARN' "npm ls a retourné $code : $output" 'NPM'
+            return $false
+        }
         return $true
     } catch {
+        Write-Log 'WARN' "npm ls exception : $_" 'NPM'
         return $false
     }
 }
@@ -145,7 +159,7 @@ if ($envArch -match 'ARM64') {
 } else {
     $DetectedArch = 'x64'
 }
-$AllArchitectures = if ($DetectedArch -eq 'x64') { @('x64','arm64') } else { @('arm64','x64') }
+$AllArchitectures = @($DetectedArch)
 
 function Test-BuildCache {
     $cacheFile = Join-Path $projectRoot '.buildcache'
@@ -154,6 +168,8 @@ function Test-BuildCache {
     $files = @()
     if (Test-Path "$projectRoot\src") {
         $files += Get-ChildItem -Path "$projectRoot\src" -Recurse -File -ErrorAction SilentlyContinue
+    } else {
+        Write-ColorText "   ⚠️ Dossier src introuvable" $Yellow
     }
 
     # Ajouter package-lock.json s'il existe
@@ -185,6 +201,7 @@ function Test-BuildCache {
 
 function Invoke-TreeShaking {
     Write-ColorText "`n🌳 Tree-shaking des modules inutilisés..." $Yellow
+    if (-not (Test-Path 'node_modules')) { return }
     try {
         $deps = (Get-Content package.json -Raw | ConvertFrom-Json).dependencies.Keys
         Get-ChildItem node_modules -Directory | Where-Object { $_.Name -ne '.bin' -and $deps -notcontains $_.Name } | ForEach-Object {
@@ -198,6 +215,20 @@ function Invoke-TreeShaking {
 
 function Minify-Sources {
     Write-ColorText "`n🔐 Minification JS/HTML..." $Yellow
+    if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
+        Write-ColorText "   ⚠️ npx introuvable, minification ignorée" $Yellow
+        return
+    }
+    $needed = @('terser','html-minifier') | Where-Object { -not (Test-Path "node_modules/$_") }
+    if ($needed.Count -gt 0) {
+        Write-ColorText "   📦 Installation des outils de minification..." $Yellow
+        $pkgList = $needed -join ' '
+        Invoke-WithRetry { npm install --save-dev $pkgList } 'install-minify-tools' -Npm
+    }
+    if (-not (Test-Path 'node_modules/terser') -or -not (Test-Path 'node_modules/html-minifier')) {
+        Write-ColorText "   ⚠️ Minification ignorée: outils manquants" $Yellow
+        return
+    }
     Get-ChildItem src -Recurse -Include *.js | ForEach-Object {
         Invoke-Step "npx terser $_.FullName -c -m -o $_.FullName"
     }
@@ -208,12 +239,21 @@ function Minify-Sources {
 
 function Compress-Assets {
     Write-ColorText "`n📦 Compression Brotli des assets..." $Yellow
-    Get-ChildItem src/assets -Recurse -File | ForEach-Object {
-        $dest = "$($_.FullName).br"
-        $in = [IO.File]::OpenRead($_.FullName)
-        $out = [IO.File]::Create($dest)
-        $br = New-Object IO.Compression.BrotliStream($out, [IO.Compression.CompressionLevel]::Optimal)
-        $in.CopyTo($br); $br.Dispose(); $out.Dispose(); $in.Dispose()
+    $assetDir = "src\assets"
+    if (-not (Test-Path $assetDir)) {
+        Write-ColorText "   ⚠️ Dossier $assetDir introuvable, compression ignorée" $Yellow
+        return
+    }
+    try {
+        Get-ChildItem $assetDir -Recurse -File | ForEach-Object {
+            $dest = "$($_.FullName).br"
+            $in = [IO.File]::OpenRead($_.FullName)
+            $out = [IO.File]::Create($dest)
+            $br = New-Object IO.Compression.BrotliStream($out, [IO.Compression.CompressionLevel]::Optimal)
+            $in.CopyTo($br); $br.Dispose(); $out.Dispose(); $in.Dispose()
+        }
+    } catch {
+        Write-ColorText "   ⚠️ Compression Brotli échouée: $_" $Yellow
     }
 }
 
@@ -256,6 +296,11 @@ try {
     # Vérifications préalables
     Write-ColorText "`n🔍 Vérifications préalables..." $Yellow
     Write-Log 'INFO' 'Vérifications préalables' 'CHK00'
+    foreach ($cmd in 'node','npm','npx') {
+        if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+            throw "$cmd n'est pas disponible dans le PATH"
+        }
+    }
     try {
         $nodeVersion = node --version
         Write-ColorText "   ✓ Node.js: $nodeVersion" $Green
@@ -368,7 +413,7 @@ module.exports = { Logger };
 
     Write-ColorText "`n📝 Compilation de preload.ts..." $Yellow
     $tscAvailable = $true
-    if (-not (Test-Path "node_modules\typescript")) {
+    if (-not (Get-Command tsc -ErrorAction SilentlyContinue) -and -not (Test-Path "node_modules\typescript")) {
         Write-ColorText "   📦 Installation de TypeScript et types Electron..." $Yellow
         Invoke-WithRetry { npm install --save-dev typescript @types/electron @types/node } 'install-ts' -Npm
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path "node_modules\typescript")) {
@@ -463,9 +508,7 @@ try {
         npx electron-packager . "SyncOtter" --platform=win32 --arch=$DetectedArch --out=release-builds --overwrite --icon="src/assets/app-icon.ico"
     } else {
         Write-ColorText "`n🛠️ Mode Electron Builder (défaut)..." $Cyan
-        $archArgs = @()
-        if ($AllArchitectures -contains 'x64') { $archArgs += '--x64' }
-        if ($AllArchitectures -contains 'arm64') { $archArgs += '--arm64' }
+        $archArgs = if ($DetectedArch -eq 'arm64') { @('--arm64') } else { @('--x64') }
 
         $builderArgs = @("--win") + $archArgs + @(
             "--publish", "never",
@@ -476,11 +519,12 @@ try {
         if ($Verbose) { $env:DEBUG = "electron-builder" }
 
         $buildSucceeded = $false
+
         Invoke-WithRetry { npx electron-builder @builderArgs } 'electron-builder'
         if ($LASTEXITCODE -eq 0) { $buildSucceeded = $true }
 
         if (-not $buildSucceeded) {
-            Write-Log 'WARN' 'Electron-builder a échoué, fallback packager' 'EB01'
+            Write-Log 'WARN' 'Electron-builder a échoué, tentative builder-lite' 'EB01'
             Invoke-WithRetry { npx electron-builder --win --dir } 'builder-lite'
             if ($LASTEXITCODE -eq 0) { $buildSucceeded = $true }
         }
@@ -488,7 +532,7 @@ try {
         if (-not $buildSucceeded) {
             Invoke-WithRetry {
                 if (-not (Test-Path "node_modules\@electron\packager")) { npm install --save-dev @electron/packager }
-            } 'install-packager'
+            } 'install-packager' -Npm
             Invoke-WithRetry { npx electron-packager . "SyncOtter" --platform=win32 --arch=$DetectedArch --out=release-builds --overwrite --icon="src/assets/app-icon.ico" } 'electron-packager'
             if ($LASTEXITCODE -eq 0) { $buildSucceeded = $true }
         }
@@ -525,11 +569,13 @@ try {
     }
     exit 1
 } finally {
-    Pop-Location
-    Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
-    if ((Test-Path $backupPath) -and (-not $Recovery)) {
-        Remove-Item $backupPath -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    try { Pop-Location } catch {}
+    try { Remove-Item Env:DEBUG -ErrorAction SilentlyContinue } catch {}
+    try {
+        if ((Test-Path $backupPath) -and (-not $Recovery)) {
+            Remove-Item $backupPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
 }
 
 Write-ColorText "`n✨ Script terminé!" $Green
