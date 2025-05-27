@@ -12,7 +12,11 @@ async function loadCache() {
 }
 
 async function saveCache(cache) {
-  try { await fs.writeJson(CACHE_PATH, cache); } catch (_) {}
+  try {
+    const tmp = CACHE_PATH + '.tmp';
+    await fs.writeJson(tmp, cache);
+    await fs.move(tmp, CACHE_PATH, { overwrite: true });
+  } catch (_) {}
 }
 
 function entryKey(filePath) {
