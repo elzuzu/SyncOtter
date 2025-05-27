@@ -322,12 +322,12 @@ try {
         return
     }
 
-    $iconPath = "src\assets\app-icon.ico"
+    $iconPath = Join-Path $projectRoot "src\assets\app-icon.ico"
     if (Test-Path $iconPath) {
         Write-ColorText "   ✓ Icône trouvée: $iconPath" $Green
     } else {
         Write-ColorText "   ⚠️ Icône manquante, création d'une icône par défaut..." $Yellow
-        $assetsDir = "src\assets"
+        $assetsDir = Join-Path $projectRoot "src\assets"
         if (-not (Test-Path $assetsDir)) {
             New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
         }
@@ -422,17 +422,21 @@ module.exports = { Logger };
         }
     }
     if ($tscAvailable) {
-        $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
-            param($s)
-            $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
-            if ($s) {
-                Invoke-Expression $tscCommand | Out-Null
-            } else {
-                Invoke-Expression $tscCommand
-            }
-            if ($LASTEXITCODE -ne 0) { throw "tsc" }
-        })) | Out-Null
-        Wait-AndCleanupJobs $jobs
+        if (Test-Path "src\preload.ts") {
+            $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
+                param($s)
+                $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
+                if ($s) {
+                    Invoke-Expression $tscCommand | Out-Null
+                } else {
+                    Invoke-Expression $tscCommand
+                }
+                if ($LASTEXITCODE -ne 0) { throw \"tsc\" }
+            })) | Out-Null
+            Wait-AndCleanupJobs $jobs
+        } else {
+            Write-ColorText "⚠️ preload.ts manquant, utilisation du JS existant" $Yellow
+        }
     } else {
         Write-ColorText "   ⚠️ TypeScript non disponible, tentative fallback" $Yellow
         $nodeScript = @'
@@ -460,16 +464,20 @@ try {
     }
     # Vérifier la compilation
     $preloadJsPath = "src\preload.js"
-    if (-not (Test-Path $preloadJsPath)) { 
+    if (-not (Test-Path $preloadJsPath)) {
         Write-ColorText "❌ Fichier preload.js manquant après compilation" $Red
         Write-ColorText "Tentative de compilation manuelle..." $Yellow
-        try {
-            npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node
-            if (-not (Test-Path $preloadJsPath)) {
-                throw "Compilation manuelle échouée"
+        if (Test-Path "src\preload.ts") {
+            try {
+                npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node
+                if (-not (Test-Path $preloadJsPath)) {
+                    throw "Compilation manuelle échouée"
+                }
+            } catch {
+                throw "Compilation de preload.ts echouée : $_"
             }
-        } catch {
-            throw "Compilation de preload.ts echouée : $_"
+        } else {
+            Write-ColorText "⚠️ preload.ts manquant, utilisation du JS existant" $Yellow
         }
     }
     Write-ColorText "   ✓ preload.ts compilé avec succès" $Green
