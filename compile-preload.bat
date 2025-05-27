@@ -7,6 +7,13 @@ if not exist "node_modules\typescript" (
     call npm install --save-dev typescript
 )
 
+:: Verifier le fichier source
+if not exist "src\preload.ts" (
+    echo ERREUR: src\preload.ts introuvable!
+    pause
+    exit /b 1
+)
+
 :: Compiler le fichier
 call npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck
 
