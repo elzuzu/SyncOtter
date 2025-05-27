@@ -7,7 +7,11 @@ param(
     [switch]$UsePackager = $false,
     [switch]$UseWebpack = $false,
     [switch]$Stealth = $false,
-    [switch]$Recovery = $false
+    [switch]$Recovery = $false,
+    [switch]$CliMode = $false,
+    [switch]$LoaderMode = $false,
+    [switch]$UltraLight = $false,
+    [switch]$HybridMode = $false
 )
 
 # Couleurs pour les messages
@@ -201,6 +205,11 @@ function Invoke-Step($command) {
 $projectRoot = $PSScriptRoot
 Write-ColorText "🚀 Répertoire du projet: $projectRoot" $Cyan
 
+if (-not ($CliMode -or $LoaderMode -or $UltraLight -or $HybridMode)) {
+    Write-ColorText "🔍 Détection du meilleur mode..." $Yellow
+    # Placeholder: ici on pourrait analyser l'environnement pour choisir le mode optimal
+}
+
 # sauvegarde éventuelle pour recovery
 $backupPath = Join-Path $projectRoot 'build_backup'
 if(Test-Path 'dist'){
@@ -354,6 +363,17 @@ module.exports = { Logger };
     if ($InstallDeps -or -not (Test-Path "node_modules")) { Invoke-TreeShaking }
     Minify-Sources
     Compress-Assets
+
+    if ($CliMode) {
+        Write-ColorText "`n🔧 Mode CLI..." $Cyan
+        if (-not (Test-Path 'package-cli.json')) { throw 'package-cli.json manquant' }
+        Invoke-Step "npx pkg -C GZip -t node18-win-x64 src/cli-main.js --out-path dist"
+        $cliExe = Get-ChildItem -Path 'dist' -Filter *.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cliExe) { Compress-Executable $cliExe.FullName }
+        Write-ColorText "   ✓ Exe CLI généré: $($cliExe.FullName)" $Green
+        Write-Log 'SUCCESS' 'Build CLI OK' 'END'
+        return
+    }
 
     if ($UseWebpack) {
         Write-ColorText "`n📦 Bundling Webpack..." $Yellow
