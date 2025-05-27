@@ -29,37 +29,37 @@ Outil de synchronisation **ultra-optimisé** pour lancement **quasi-instantané*
 ### **Première utilisation :**
 ```powershell
 # 1. Créer votre configuration
-.\setup-config.ps1
+node config-generator.js
 
 # 2. Tester en mode développement  
 npm start
 
 # 3. Compiler l'exe ultra-léger
-.\build.ps1 -Type ultra
+.\build-app.ps1
 
 # 4. Déployer sur votre share/répertoire
-.\deploy.ps1 -DestinationPath "\\server\tools\SyncOtter"
+.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"
 ```
 
 ### Compilation express :
 ```powershell
 # Build ULTRA-LÉGER (recommandé pour share)
-.\build.ps1 -Type ultra
+npm run build-ultra
 
 # Build portable léger  
-.\build.ps1 -Type portable
+npm run build-portable
 
 # Test développement
-.\build.ps1 -Type dev
+npm start
 ```
 
 ### Déploiement avec config personnalisé :
 ```powershell
 # Déploiement simple
-.\deploy.ps1 -DestinationPath "\\server\tools\SyncOtter"
+.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"
 
 # Déploiement avec config personnalisé
-.\deploy.ps1 -DestinationPath "C:\Tools\MySync" `
+.\deploy-enterprise.ps1 -DestinationPath "C:\Tools\MySync" `
              -SourceDir "\\server\releases\latest" `
              -TargetDir "C:\Apps\MyApp" `
              -AppToLaunch "C:\Apps\MyApp\app.exe" `
@@ -70,16 +70,10 @@ npm start
 ### Lancement optimisé :
 ```powershell
 # Lancement direct (gestion auto des processus)
-.\launch.ps1
+./SyncOtter-Ultra.exe
 
-# Depuis share réseau (avec copie temporaire)
-.\launch.ps1 -FromShare
-
-# Kill forcé des processus existants
-.\launch.ps1 -KillExisting
-
-# Combiné pour automation
-.\launch.ps1 \\server\tools\SyncOtter.exe -FromShare -KillExisting
+# Depuis share réseau (copie automatique)
+\\server\tools\SyncOtter\SyncOtter-Ultra.exe
 ```
 
 ## ⚡ Optimisations Performance
@@ -128,22 +122,22 @@ npm start
 ## 🎯 Utilisation Type Share Réseau
 
 ### **Approche Simple :**
-1. **Build une fois** : `.\build.ps1 -Type ultra`
-2. **Déployer** : `.\deploy.ps1 -DestinationPath "\\server\tools\SyncOtter"`
-3. **Lancer depuis poste** : `.\launch.ps1 \\server\tools\SyncOtter\SyncOtter-*.exe -FromShare`
+1. **Build une fois** : `.\build-app.ps1`
+2. **Déployer** : `.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"`
+3. **Lancer depuis poste** : `\\server\tools\SyncOtter\SyncOtter-*.exe`
 
 ### **Approche Multi-Configurations :**
-1. **Build une fois** : `.\build.ps1 -Type ultra`
+1. **Build une fois** : `.\build-app.ps1`
 2. **Déployer pour App A** : 
    ```powershell
-   .\deploy.ps1 -DestinationPath "\\server\tools\AppA" `
+   .\deploy-enterprise.ps1 -DestinationPath "\\server\tools\AppA" `
                 -SourceDir "\\build\AppA" `
                 -TargetDir "C:\Apps\AppA" `
                 -AppName "Application A"
    ```
 3. **Déployer pour App B** :
    ```powershell
-   .\deploy.ps1 -DestinationPath "\\server\tools\AppB" `
+   .\deploy-enterprise.ps1 -DestinationPath "\\server\tools\AppB" `
                 -SourceDir "\\build\AppB" `
                 -TargetDir "C:\Apps\AppB" `
                 -AppName "Application B"
@@ -160,19 +154,18 @@ npm start
 
 ```powershell
 # BUILD
-.\build.ps1 -Type ultra      # Ultra-léger portable
-.\build.ps1 -Type portable   # Portable standard  
-.\build.ps1 -Type installer  # Installateur léger
-.\build.ps1 -Type dev        # Mode développement
+.\build-app.ps1      # Ultra-léger portable
+npm run build-portable   # Portable standard  
+npm run build  # Installateur léger
+npm start        # Mode développement
 
 # DÉPLOIEMENT
-.\deploy.ps1 -DestinationPath "C:\Tools"  # Déploiement simple
-.\deploy.ps1 [params...]                  # Déploiement personnalisé
+.\deploy-enterprise.ps1 -DestinationPath "C:\Tools"  # Déploiement simple
+.\deploy-enterprise.ps1 [params...]                  # Déploiement personnalisé
 
-# LANCEMENT  
-.\launch.ps1                 # Auto-détection exe
-.\launch.ps1 path\to\app.exe # Exe spécifique
-.\launch.ps1 -FromShare      # Optimisé share réseau
+# LANCEMENT
+SyncOtter-Ultra.exe                       # Lancement local
+\\server\tools\SyncOtter\SyncOtter-Ultra.exe  # Lancement depuis share
 ```
 
 ## 🎯 **Exemples Pratiques de Configuration :**
