@@ -4,7 +4,8 @@ param(
     [switch]$InstallDeps = $false,
     [switch]$Verbose = $false,
     [switch]$UseForge = $false,
-    [switch]$UsePackager = $false
+    [switch]$UsePackager = $false,
+    [switch]$UltraPortable = $false
 )
 
 # Couleurs pour les messages
@@ -21,6 +22,52 @@ function Write-ColorText($Text, $Color) {
     $Host.UI.RawUI.ForegroundColor = $currentColor
 }
 
+# Détection des privilèges administrateur
+function Test-IsAdmin {
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $p = New-Object Security.Principal.WindowsPrincipal($id)
+        return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+# Nettoyage agressif du cache electron-builder
+function Clean-ElectronBuilderCache {
+    Write-ColorText "`n🧹 Nettoyage cache electron-builder..." $Yellow
+    $paths = @(
+        Join-Path $env:USERPROFILE ".cache\electron-builder",
+        Join-Path $env:LOCALAPPDATA "electron-builder\cache"
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            try {
+                Remove-Item -Path $p -Recurse -Force -ErrorAction Stop
+                Write-ColorText "   ✓ Supprimé: $p" $Gray
+            } catch {
+                Write-ColorText "   ⚠️ Impossible de supprimer: $p" $Yellow
+            }
+        }
+    }
+}
+
+# Construction ultra-portable sans outils externes
+function Build-UltraPortable {
+    $outDir = Join-Path $projectRoot "ultra-portable"
+    if (Test-Path $outDir) { Remove-Item $outDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $outDir | Out-Null
+    $files = @(
+        'main.js','package.json','splash.html','CacheManager.js','ErrorRecovery.js',
+        'NetworkOptimizer.js','TransferManager.js','version-manager.js','config.json'
+    )
+    foreach ($f in $files) { if (Test-Path $f) { Copy-Item $f -Destination $outDir -Force } }
+    foreach ($d in @('lib','logger','monitoring','src','node_modules')) {
+        if (Test-Path $d) { Copy-Item $d -Destination (Join-Path $outDir $d) -Recurse -Force }
+    }
+    Write-ColorText "✅ Ultra-portable prêt dans $outDir" $Green
+}
+
 $projectRoot = $PSScriptRoot
 Write-ColorText "🚀 Répertoire du projet: $projectRoot" $Cyan
 
@@ -35,6 +82,8 @@ try {
     } catch {
         throw "Node.js n'est pas installé ou n'est pas dans le PATH"
     }
+
+    Clean-ElectronBuilderCache
 
     $iconPath = "src\assets\app-icon.ico"
     if (Test-Path $iconPath) {
@@ -137,20 +186,32 @@ module.exports = { Logger };
             npm install --save-dev @electron/packager
         }
         npx electron-packager . "SyncOtter" --platform=win32 --arch=x64 --out=release-builds --overwrite --icon="src/assets/app-icon.ico"
+    } elseif ($UltraPortable) {
+        Write-ColorText "`n📦 Mode Ultra-Portable..." $Cyan
+        Build-UltraPortable
     } else {
         Write-ColorText "`n🛠️ Mode Electron Builder (défaut)..." $Cyan
+        $isAdmin = Test-IsAdmin
         $builderArgs = @(
             "--win",
             "--publish", "never",
+            "--config.win.sign=null",
             "--config.compression=normal",
             "--config.nsis.oneClick=false",
             "--config.nsis.allowElevation=true"
         )
+        if (-not $isAdmin) {
+            $builderArgs += "--dir"
+            Write-ColorText "   ⚠️ Exécution sans privilèges admin - build en mode dossier" $Yellow
+        } else {
+            Write-ColorText "   ✓ Privilèges admin détectés" $Green
+        }
         if ($Verbose) { $env:DEBUG = "electron-builder" }
         npx electron-builder @builderArgs
         if ($LASTEXITCODE -ne 0) {
-            Write-ColorText "   ⚠️ Electron-builder a échoué, tentative simplifiée..." $Yellow
-            npx electron-builder --win --dir
+            Write-ColorText "   ⚠️ Electron-builder a échoué, fallback electron-packager..." $Yellow
+            if (-not (Test-Path "node_modules\@electron\packager")) { npm install --save-dev @electron/packager }
+            npx electron-packager . "SyncOtter" --platform=win32 --arch=x64 --out=release-builds --overwrite --icon="src/assets/app-icon.ico"
             if ($LASTEXITCODE -ne 0) { throw "Tous les modes de build ont échoué" }
         }
     }
@@ -168,4 +229,4 @@ module.exports = { Logger };
 }
 
 Write-ColorText "`n✨ Script terminé!" $Green
-Write-ColorText "💡 Utilisez -UseForge ou -UsePackager si electron-builder pose problème" $Cyan
+Write-ColorText "💡 Utilisez -UseForge, -UsePackager ou -UltraPortable si electron-builder pose problème" $Cyan
