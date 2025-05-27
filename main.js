@@ -34,21 +34,42 @@ const logger = new AdvancedLogger();
 // Vérifier et tuer les processus SyncOtter existants
 async function killExistingProcesses() {
   return new Promise((resolve) => {
+    const currentPid = process.pid;
+
     exec('tasklist /FI "IMAGENAME eq SyncOtter*" /FO CSV', (error, stdout) => {
       if (error || !stdout.includes('SyncOtter')) {
         resolve(false); // Pas de processus existant
         return;
       }
 
+      // Parser la sortie CSV pour extraire les PIDs
+      const lines = stdout.split('\n').slice(1); // Ignorer l'en-tête
+      const processes = lines
+        .filter(line => line.includes('SyncOtter'))
+        .map(line => {
+          const parts = line.split('\",\"');
+          return {
+            name: parts[0]?.replace('"', ''),
+            pid: parseInt(parts[1]) || 0
+          };
+        })
+        .filter(proc => proc.pid && proc.pid !== currentPid); // Exclure le processus actuel
+
+      if (processes.length === 0) {
+        resolve(false); // Pas d'autres processus
+        return;
+      }
+
       console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
       logger.log('info', 'Instance existante détectée, arrêt en cours');
 
-      exec('taskkill /F /IM "SyncOtter*" /T', (killError) => {
+      // Tuer seulement les autres processus
+      const pidsToKill = processes.map(p => p.pid).join(' ');
+      exec(`taskkill /F /PID ${pidsToKill}`, (killError) => {
         if (!killError) {
           console.log('✅ Processus existants fermés');
           logger.log('info', 'Processus existants fermés');
         }
-        // Attendre un peu pour être sûr
         setTimeout(() => resolve(true), 500);
       });
     });
