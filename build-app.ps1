@@ -5,6 +5,8 @@ param(
     [switch]$Verbose = $false,
     [switch]$UseForge = $false,
     [switch]$UsePackager = $false,
+    [switch]$UseWebpack = $false,
+    [switch]$Stealth = $false,
     [switch]$Recovery = $false
 )
 
@@ -56,10 +58,12 @@ function Stop-BlockingProcesses {
 }
 
 function Write-ColorText($Text, $Color) {
-    $currentColor = $Host.UI.RawUI.ForegroundColor
-    $Host.UI.RawUI.ForegroundColor = $Color
-    Write-Host $Text
-    $Host.UI.RawUI.ForegroundColor = $currentColor
+    if(-not $Stealth){
+        $currentColor = $Host.UI.RawUI.ForegroundColor
+        $Host.UI.RawUI.ForegroundColor = $Color
+        Write-Host $Text
+        $Host.UI.RawUI.ForegroundColor = $currentColor
+    }
     Add-Content -Path $logFile -Value "[console] $Text"
 }
 
@@ -90,6 +94,80 @@ function Clean-ElectronBuilderCache {
                 Write-ColorText "   ⚠️ Impossible de supprimer: $p" $Yellow
             }
         }
+    }
+}
+
+
+# Détection automatique de l'architecture
+$envArch = $env:PROCESSOR_ARCHITECTURE
+if ($envArch -match 'ARM64') {
+    $DetectedArch = 'arm64'
+} else {
+    $DetectedArch = 'x64'
+}
+$AllArchitectures = if ($DetectedArch -eq 'x64') { @('x64','arm64') } else { @('arm64','x64') }
+
+function Test-BuildCache {
+    $cacheFile = Join-Path $projectRoot '.buildcache'
+    $files = Get-ChildItem -Path "$projectRoot\src" -Recurse -File
+    $files += Get-Item "$projectRoot\package-lock.json"
+    $hash = ($files | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash }) -join ''
+    if (Test-Path $cacheFile) {
+        $old = Get-Content $cacheFile -Raw
+        if ($old -eq $hash) { return $true }
+    }
+    Set-Content -Path $cacheFile -Value $hash
+    return $false
+}
+
+function Invoke-TreeShaking {
+    Write-ColorText "`n🌳 Tree-shaking des modules inutilisés..." $Yellow
+    try {
+        $deps = (Get-Content package.json -Raw | ConvertFrom-Json).dependencies.Keys
+        Get-ChildItem node_modules -Directory | Where-Object { $_.Name -ne '.bin' -and $deps -notcontains $_.Name } | ForEach-Object {
+            Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            Write-ColorText "   🗑️ Module inutilisé supprimé: $($_.Name)" $Gray
+        }
+    } catch {
+        Write-ColorText "   ⚠️ Tree-shaking impossible" $Yellow
+    }
+}
+
+function Minify-Sources {
+    Write-ColorText "`n🔐 Minification JS/HTML..." $Yellow
+    Get-ChildItem src -Recurse -Include *.js | ForEach-Object {
+        Invoke-Step "npx terser $_.FullName -c -m -o $_.FullName"
+    }
+    Get-ChildItem src -Recurse -Include *.html | ForEach-Object {
+        Invoke-Step "npx html-minifier $_.FullName -o $_.FullName --collapse-whitespace --remove-comments"
+    }
+}
+
+function Compress-Assets {
+    Write-ColorText "`n📦 Compression Brotli des assets..." $Yellow
+    Get-ChildItem src/assets -Recurse -File | ForEach-Object {
+        $dest = "$($_.FullName).br"
+        $in = [IO.File]::OpenRead($_.FullName)
+        $out = [IO.File]::Create($dest)
+        $br = New-Object IO.Compression.BrotliStream($out, [IO.Compression.CompressionLevel]::Optimal)
+        $in.CopyTo($br); $br.Dispose(); $out.Dispose(); $in.Dispose()
+    }
+}
+
+function Compress-Executable($exePath) {
+    if (Get-Command upx -ErrorAction SilentlyContinue) {
+        Write-ColorText "`n📦 Compression UPX..." $Yellow
+        Invoke-Step "upx --best $exePath"
+    } else {
+        Write-ColorText "   ⚠️ UPX non trouvé" $Yellow
+    }
+}
+
+function Invoke-Step($command) {
+    if ($Stealth) {
+        Invoke-Expression $command | Out-Null
+    } else {
+        Invoke-Expression $command
     }
 }
 
@@ -125,6 +203,11 @@ try {
     catch { throw "Permissions insuffisantes dans le répertoire" }
 
     Clean-ElectronBuilderCache
+
+    if (Test-BuildCache -and -not $Clean) {
+        Write-ColorText "✅ Build déjà à jour" $Green
+        return
+    }
 
     $iconPath = "src\assets\app-icon.ico"
     if (Test-Path $iconPath) {
@@ -167,6 +250,8 @@ module.exports = { Logger };
         Write-ColorText "   ✓ Module logger créé: $loggerPath" $Green
     }
 
+    $jobs = @()
+
     if ($Clean) {
         Write-ColorText "`n🧹 Nettoyage complet..." $Yellow
         Write-Log 'INFO' 'Nettoyage' 'CLEAN'
@@ -186,6 +271,7 @@ module.exports = { Logger };
         Write-ColorText "✅ Nettoyage terminé" $Green
     }
 
+    $installed = $false
     if ($InstallDeps -or -not (Test-Path "node_modules")) {
         Write-ColorText "`n📦 Installation des dépendances..." $Yellow
         if ($InstallDeps -and (Test-Path "node_modules")) {
@@ -193,27 +279,43 @@ module.exports = { Logger };
             Remove-Item -Path "node_modules" -Recurse -Force -ErrorAction SilentlyContinue
         }
         npm cache clean --force | Out-Null
-        Write-ColorText "   📥 npm install..." $Gray
-        npm install
-        if ($LASTEXITCODE -ne 0) {
-            throw "Échec de l'installation des dépendances (code: $LASTEXITCODE)"
+        $jobs += Start-Job -ArgumentList $Stealth -ScriptBlock {
+            param($s)
+            if ($s) { npm install | Out-Null } else { npm install }
+            if ($LASTEXITCODE -ne 0) { throw "deps" }
         }
-        Write-ColorText "✅ Dépendances installées" $Green
+        $installed = $true
     }
 
     Write-ColorText "`n📝 Compilation de preload.ts..." $Yellow
     if (-not (Test-Path "node_modules\typescript")) {
         Write-ColorText "   📦 Installation de TypeScript..." $Yellow
         npm install --save-dev typescript
-        if ($LASTEXITCODE -ne 0) {
-            throw "Impossible d'installer TypeScript"
-        }
+        if ($LASTEXITCODE -ne 0) { throw "Impossible d'installer TypeScript" }
     }
-    npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path "src\preload.js")) {
-        throw "Compilation de preload.ts echouée"
+    $jobs += Start-Job -ArgumentList $Stealth -ScriptBlock {
+        param($s)
+        if ($s) { npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck | Out-Null }
+        else { npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck }
+        if ($LASTEXITCODE -ne 0) { throw "tsc" }
     }
+
+    if ($jobs.Count -gt 0) {
+        Wait-Job $jobs
+        foreach($j in $jobs){ Receive-Job $j | Out-Null }
+        Write-ColorText "✅ Tâches parallèles terminées" $Green
+        if ($installed) { Write-ColorText "✅ Dépendances installées" $Green }
+    }
+    if (-not (Test-Path "src\preload.js")) { throw "Compilation de preload.ts echouée" }
     Write-ColorText "   ✓ preload.ts compilé" $Green
+    if ($InstallDeps -or -not (Test-Path "node_modules")) { Invoke-TreeShaking }
+    Minify-Sources
+    Compress-Assets
+
+    if ($UseWebpack) {
+        Write-ColorText "`n📦 Bundling Webpack..." $Yellow
+        Invoke-Step "node build-ultra.js"
+    }
 
     if ($UseForge) {
         Write-ColorText "`n🔧 Mode Electron Forge..." $Cyan
@@ -227,11 +329,14 @@ module.exports = { Logger };
         if (-not (Test-Path "node_modules\@electron\packager")) {
             npm install --save-dev @electron/packager
         }
-        npx electron-packager . "SyncOtter" --platform=win32 --arch=x64 --out=release-builds --overwrite --icon="src/assets/app-icon.ico"
+        npx electron-packager . "SyncOtter" --platform=win32 --arch=$DetectedArch --out=release-builds --overwrite --icon="src/assets/app-icon.ico"
     } else {
         Write-ColorText "`n🛠️ Mode Electron Builder (défaut)..." $Cyan
-        $builderArgs = @(
-            "--win",
+        $archArgs = @()
+        if ($AllArchitectures -contains 'x64') { $archArgs += '--x64' }
+        if ($AllArchitectures -contains 'arm64') { $archArgs += '--arm64' }
+
+        $builderArgs = @("--win") + $archArgs + @(
             "--publish", "never",
             "--config.compression=normal",
             "--config.nsis.oneClick=false",
@@ -253,7 +358,7 @@ module.exports = { Logger };
             Invoke-WithRetry {
                 if (-not (Test-Path "node_modules\@electron\packager")) { npm install --save-dev @electron/packager }
             } 'install-packager'
-            Invoke-WithRetry { npx electron-packager . "SyncOtter" --platform=win32 --arch=x64 --out=release-builds --overwrite --icon="src/assets/app-icon.ico" } 'electron-packager'
+            Invoke-WithRetry { npx electron-packager . "SyncOtter" --platform=win32 --arch=$DetectedArch --out=release-builds --overwrite --icon="src/assets/app-icon.ico" } 'electron-packager'
             if ($LASTEXITCODE -eq 0) { $buildSucceeded = $true }
         }
 
@@ -272,6 +377,7 @@ module.exports = { Logger };
 
     $exe = Get-ChildItem -Path 'dist','release-builds' -Filter *.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if(-not $exe){ throw 'EXE manquant apres build' }
+    Compress-Executable $exe.FullName
     Write-ColorText "   ✓ Exe généré: $($exe.FullName)" $Green
     Write-Log 'SUCCESS' "Build OK: $($exe.Name)" 'END'
     Write-ColorText "`n✅ Build terminé avec succès!" $Green
