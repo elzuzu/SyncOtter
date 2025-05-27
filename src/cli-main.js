@@ -5,9 +5,7 @@ const yargs = require('yargs');
 const { hideBin } = require('yargs/helpers');
 
 const NetworkOptimizer = require('../NetworkOptimizer');
-const TransferManager = require('../TransferManager');
 const CacheManager = require('../CacheManager');
-const ErrorRecovery = require('../ErrorRecovery');
 const TelemetryCollector = require('../monitoring/TelemetryCollector');
 const AnalyticsEngine = require('../monitoring/AnalyticsEngine');
 const ReportGenerator = require('../monitoring/ReportGenerator');
@@ -15,6 +13,7 @@ const HealthChecker = require('../monitoring/HealthChecker');
 const AdvancedLogger = require('../logger/AdvancedLogger');
 const versionManager = require('../version-manager');
 const CliInterface = require('./cli-interface');
+const { ensureDirectories, scanSourceFiles, copyFileIfNeeded } = require('../shared/sync-core');
 
 NetworkOptimizer.relaunchFromTempIfNeeded();
 
@@ -32,43 +31,16 @@ async function loadConfig() {
   config = await fs.readJson(configPath);
 }
 
-async function ensureDirectories() {
-  if (!await fs.pathExists(config.sourceDirectory)) {
-    throw new Error(`Répertoire source introuvable: ${config.sourceDirectory}`);
-  }
-  await fs.ensureDir(config.targetDirectory);
-}
-
-async function scanSourceFiles() {
-  const files = [];
-  const dir = config.sourceDirectory;
-  const entries = await fs.readdir(dir);
-  for (const entry of entries) {
-    const p = path.join(dir, entry);
-    const stat = await fs.stat(p);
-    if (stat.isFile()) files.push(p);
-  }
-  return files;
-}
-
-async function copyFileIfNeeded(file, cache) {
-  const stat = await fs.stat(file);
-  if (!CacheManager.needsSync(file, stat, cache)) return false;
-  const dest = path.join(config.targetDirectory, path.basename(file));
-  await TransferManager.transferFile(file, dest, { rateLimit: config.rateLimit });
-  CacheManager.updateCacheEntry(cache, file, stat);
-  return true;
-}
 
 async function performSync() {
   ui.showStatus('Début de la synchronisation...');
   const telemetry = new TelemetryCollector({ granularity: config.telemetryGranularity });
   logger.log('info', 'Début de la synchronisation');
 
-  await ensureDirectories();
+  await ensureDirectories(config);
   const cache = await CacheManager.loadCache();
 
-  const sourceFiles = await scanSourceFiles();
+  const sourceFiles = await scanSourceFiles(config);
   if (sourceFiles.length === 0) {
     ui.showStatus('⚠️ Aucun fichier à synchroniser');
     return;
@@ -78,7 +50,7 @@ async function performSync() {
   let completed = 0;
   let copied = 0;
   for (const file of sourceFiles) {
-    const wasCopied = await copyFileIfNeeded(file, cache);
+    const wasCopied = await copyFileIfNeeded(file, config, cache, telemetry);
     if (wasCopied) copied++;
     completed++;
     ui.updateProgress({
@@ -93,7 +65,8 @@ async function performSync() {
 
   telemetry.finish();
   analytics.addMetrics(telemetry.metrics);
-  ReportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
+  const health = await HealthChecker.basicReport(config);
+  ReportGenerator.generate({ metrics: telemetry.metrics, health });
   CacheManager.evictCache(cache);
   await CacheManager.saveCache(cache);
 
