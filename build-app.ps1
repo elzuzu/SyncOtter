@@ -286,7 +286,12 @@ try {
         if (-not (Test-Path $assetsDir)) {
             New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
         }
-        Write-ColorText "   ⚠️ ATTENTION: Vous devez fournir une vraie icône .ico dans $iconPath" $Yellow
+        $iconBase64 = @(
+            'AAABAAEAAQEAAAAAAABDAAAAFgAAAIlQTkcNChoKAAAADUlIRFIAAAABAAAAAQgEAAAAtRwMAgAAAAtJREFUeNpj/M/AAAYAA7gdlCsAAAAASUVORK5CYII='
+        ) -join ''
+        [IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64))
+        Write-ColorText "   ✓ Icône par défaut créée: $iconPath" $Green
+        Write-ColorText "   ⚠️ ATTENTION: Remplacez cette icône par votre icône personnalisée" $Yellow
     }
 
     $utilsDir = "src\utils"
