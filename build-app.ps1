@@ -112,14 +112,37 @@ $AllArchitectures = if ($DetectedArch -eq 'x64') { @('x64','arm64') } else { @('
 
 function Test-BuildCache {
     $cacheFile = Join-Path $projectRoot '.buildcache'
-    $files = Get-ChildItem -Path "$projectRoot\src" -Recurse -File
-    $files += Get-Item "$projectRoot\package-lock.json"
-    $hash = ($files | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash }) -join ''
-    if (Test-Path $cacheFile) {
-        $old = Get-Content $cacheFile -Raw
-        if ($old -eq $hash) { return $true }
+
+    # Récupérer les fichiers source avec gestion d'erreur
+    $files = @()
+    if (Test-Path "$projectRoot\src") {
+        $files += Get-ChildItem -Path "$projectRoot\src" -Recurse -File -ErrorAction SilentlyContinue
     }
-    Set-Content -Path $cacheFile -Value $hash
+
+    # Ajouter package-lock.json s'il existe
+    $packageLockPath = "$projectRoot\package-lock.json"
+    if (Test-Path $packageLockPath) {
+        $files += Get-Item $packageLockPath -ErrorAction SilentlyContinue
+    }
+
+    # Calculer le hash de tous les fichiers
+    if ($files.Count -gt 0) {
+        $hash = ($files | Get-FileHash -Algorithm SHA256 -ErrorAction SilentlyContinue | ForEach-Object { $_.Hash }) -join ''
+    } else {
+        $hash = "empty"
+    }
+
+    # Vérifier le cache
+    if (Test-Path $cacheFile) {
+        $old = Get-Content $cacheFile -Raw -ErrorAction SilentlyContinue
+        if ($old -eq $hash) {
+            Write-ColorText "✅ Build déjà à jour (cache hit)" $Green
+            return $true
+        }
+    }
+
+    # Sauvegarder le nouveau hash
+    Set-Content -Path $cacheFile -Value $hash -ErrorAction SilentlyContinue
     return $false
 }
 
@@ -399,7 +422,7 @@ module.exports = { Logger };
 } finally {
     Pop-Location
     Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
-    if (Test-Path $backupPath -and -not $Recovery) {
+    if ((Test-Path $backupPath) -and (-not $Recovery)) {
         Remove-Item $backupPath -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
