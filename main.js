@@ -3,6 +3,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, exec } = require('child_process');
+const versionManager = require('./version-manager');
 
 // Modules d'optimisation réseau
 const NetworkOptimizer = require('./NetworkOptimizer');
@@ -268,7 +269,10 @@ async function performSync() {
 }
 
 app.whenReady().then(async () => {
-  await loadConfig();
+  loadConfig();
+  versionManager.checkForUpdates().catch(err =>
+    console.error('Update check failed:', err)
+  );
 
   const hadExistingProcess = await killExistingProcesses();
 

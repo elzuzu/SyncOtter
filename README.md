@@ -232,3 +232,10 @@ npm start
 - ✅ **"X fichiers synchronisés"** → Mission accomplie !
 
 **La loutre gère tout ! Configuration externe + gestion processus + répertoires auto = Zéro souci ! 🦦💪**
+
+## 🚀 Build & Deploy Revolution
+
+- `build-ultra-webpack` : packaging ultra-compact via Webpack+Brotli
+- `deploy-enterprise.ps1` : déploiement automatisé avec rollback
+- `config-generator.js` : génération de templates par environnement
+- Mise à jour automatique pilotée par `version-manager.js`
