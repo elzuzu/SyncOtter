@@ -1,6 +1,8 @@
 # 🦦 SyncOtter - Synchronisation Ultra-Légère
 
-Outil de synchronisation **ultra-optimisé** pour lancement **quasi-instantané** depuis share réseau !
+Outil de synchronisation **ultra-optimisé** pour lancement **quasi-instantané** depuis un partage réseau.
+
+Cette version repose uniquement sur l'application Electron et la ligne de commande. Les anciennes librairies expérimentales ont été retirées du dépôt.
 
 ## ✨ **Nouvelles Fonctionnalités Auto-Magiques :**
 
@@ -28,16 +30,19 @@ Outil de synchronisation **ultra-optimisé** pour lancement **quasi-instantané*
 
 ### **Première utilisation :**
 ```powershell
-# 1. Créer votre configuration
+# 1. Installer les dépendances
+npm install
+
+# 2. Créer votre configuration
 node config-generator.js
 
-# 2. Tester en mode développement  
+# 3. Tester en mode développement
 npm start
 
-# 3. Compiler l'exe ultra-léger
+# 4. Compiler l'exe ultra-léger
 .\build-app.ps1
 
-# 4. Déployer sur votre share/répertoire
+# 5. Déployer sur votre share/répertoire
 .\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"
 ```
 
@@ -167,6 +172,16 @@ npm start        # Mode développement
 SyncOtter-Ultra.exe                       # Lancement local
 \\server\tools\SyncOtter\SyncOtter-Ultra.exe  # Lancement depuis share
 ```
+
+### Utilisation en ligne de commande
+
+Une version CLI est disponible dans `package-cli.json`. Elle peut être lancée directement avec Node :
+
+```bash
+node src/cli-main.js
+```
+
+Ou compilée en exécutable via `npm run build` dans ce package.
 
 ## 🎯 **Exemples Pratiques de Configuration :**
 
