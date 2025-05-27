@@ -315,14 +315,18 @@ module.exports = { Logger };
 
     Write-ColorText "`n📝 Compilation de preload.ts..." $Yellow
     if (-not (Test-Path "node_modules\typescript")) {
-        Write-ColorText "   📦 Installation de TypeScript..." $Yellow
-        npm install --save-dev typescript
+        Write-ColorText "   📦 Installation de TypeScript et types Electron..." $Yellow
+        npm install --save-dev typescript @types/electron @types/node
         if ($LASTEXITCODE -ne 0) { throw "Impossible d'installer TypeScript" }
     }
     $jobs += Start-Job -ArgumentList $Stealth -ScriptBlock {
         param($s)
-        if ($s) { npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck | Out-Null }
-        else { npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck }
+        $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
+        if ($s) { 
+            Invoke-Expression $tscCommand | Out-Null 
+        } else { 
+            Invoke-Expression $tscCommand 
+        }
         if ($LASTEXITCODE -ne 0) { throw "tsc" }
     }
 
@@ -332,8 +336,21 @@ module.exports = { Logger };
         Write-ColorText "✅ Tâches parallèles terminées" $Green
         if ($installed) { Write-ColorText "✅ Dépendances installées" $Green }
     }
-    if (-not (Test-Path "src\preload.js")) { throw "Compilation de preload.ts echouée" }
-    Write-ColorText "   ✓ preload.ts compilé" $Green
+    # Vérifier la compilation
+    $preloadJsPath = "src\preload.js"
+    if (-not (Test-Path $preloadJsPath)) { 
+        Write-ColorText "❌ Fichier preload.js manquant après compilation" $Red
+        Write-ColorText "Tentative de compilation manuelle..." $Yellow
+        try {
+            npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node
+            if (-not (Test-Path $preloadJsPath)) {
+                throw "Compilation manuelle échouée"
+            }
+        } catch {
+            throw "Compilation de preload.ts echouée : $_"
+        }
+    }
+    Write-ColorText "   ✓ preload.ts compilé avec succès" $Green
     if ($InstallDeps -or -not (Test-Path "node_modules")) { Invoke-TreeShaking }
     Minify-Sources
     Compress-Assets
