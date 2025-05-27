@@ -260,9 +260,13 @@ function Compress-Assets {
 function Compress-Executable($exePath) {
     if (Get-Command upx -ErrorAction SilentlyContinue) {
         Write-ColorText "`n📦 Compression UPX..." $Yellow
-        Invoke-Step "upx --best $exePath"
+        try {
+            Invoke-Step "upx --best `\"$exePath`\""
+        } catch {
+            Write-ColorText "   ⚠️ Compression UPX échouée: $_" $Yellow
+        }
     } else {
-        Write-ColorText "   ⚠️ UPX non trouvé" $Yellow
+        Write-ColorText "   ⚠️ UPX non trouvé (optionnel)" $Gray
     }
 }
 
