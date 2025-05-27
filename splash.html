@@ -279,6 +279,15 @@
                         progressDetails.textContent = '';
                     }
                 });
+
+                ipcRenderer.on('telemetry-summary', (event, data) => {
+                    const summary = `Temps: ${Math.round(data.durationMs/1000)}s • Fichiers: ${data.filesCopied} • Erreurs: ${data.errors}`;
+                    const summaryEl = document.createElement('div');
+                    summaryEl.textContent = summary;
+                    summaryEl.style.fontSize = '12px';
+                    summaryEl.style.marginTop = '8px';
+                    document.body.appendChild(summaryEl);
+                });
             } catch (error) {
                 console.error('Erreur IPC:', error);
                 document.getElementById('status').textContent = 'Erreur de communication...';

@@ -3,6 +3,11 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, exec } = require('child_process');
+const TelemetryCollector = require('./monitoring/TelemetryCollector');
+const AnalyticsEngine = require('./monitoring/AnalyticsEngine');
+const ReportGenerator = require('./monitoring/ReportGenerator');
+const HealthChecker = require('./monitoring/HealthChecker');
+const AdvancedLogger = require('./logger/AdvancedLogger');
 
 // Désactiver les warnings et optimiser les performances
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
@@ -11,6 +16,10 @@ app.commandLine.appendSwitch('--disable-web-security');
 
 let mainWindow;
 let config;
+let telemetry;
+const analytics = new AnalyticsEngine();
+const reportGenerator = new ReportGenerator();
+const logger = new AdvancedLogger();
 
 // Vérifier et tuer les processus SyncOtter existants
 async function killExistingProcesses() {
@@ -21,11 +30,11 @@ async function killExistingProcesses() {
         return;
       }
       
-      console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
+      logger.log("info", "Instance existante détectée, arrêt en cours");
       
       exec('taskkill /F /IM "SyncOtter*" /T', (killError) => {
         if (!killError) {
-          console.log('✅ Processus existants fermés');
+          logger.log('info', 'Processus existants fermés');
         }
         // Attendre un peu pour être sûr
         setTimeout(() => resolve(true), 500);
@@ -219,10 +228,13 @@ async function copyFileIfNeeded(sourceFile) {
     }
     
     // Copier le fichier
+    const stats = await fs.stat(sourceFile);
     await fs.copy(sourceFile, targetFile);
+    telemetry.recordFileCopied(stats.size);
     return true; // Fichier copié
     
   } catch (error) {
+    telemetry.recordError();
     console.error(`Erreur copie ${sourceFile}:`, error);
     return false;
   }
@@ -231,6 +243,9 @@ async function copyFileIfNeeded(sourceFile) {
 // Synchronisation parallélisée (avec vérifications)
 async function performSync() {
   try {
+    telemetry = new TelemetryCollector({ granularity: config.telemetryGranularity });
+    telemetry.on('metric', (m) => logger.log('debug', 'metric', m));
+    logger.log('info', 'Début de la synchronisation');
     console.log('🦦 Début de la synchronisation...');
     mainWindow.webContents.send('update-status', 'Vérification des répertoires...');
     
@@ -240,6 +255,7 @@ async function performSync() {
     mainWindow.webContents.send('update-status', 'Analyse des fichiers...');
     
     const sourceFiles = await scanSourceFiles();
+    logger.log('info', `Fichiers trouvés: ${sourceFiles.length}`);
     console.log(`📁 ${sourceFiles.length} fichiers trouvés`);
     
     if (sourceFiles.length === 0) {
@@ -269,8 +285,9 @@ async function performSync() {
           copied
         });
       });
-      
+
       await Promise.all(promises);
+      telemetry.recordBatch();
     }
     
     // Traiter par batch parallèles
@@ -279,7 +296,13 @@ async function performSync() {
       const batch = sourceFiles.slice(i, i + batchSize);
       await processBatch(batch);
     }
-    
+
+    telemetry.finish();
+    analytics.addMetrics(telemetry.metrics);
+    const reportFile = reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
+    logger.log('info', `Rapport généré: ${reportFile}`);
+    logger.log('info', `Synchronisation terminée: ${copied} fichiers`);
+    mainWindow.webContents.send('telemetry-summary', telemetry.metrics);
     console.log(`✅ Synchronisation terminée: ${copied} fichiers copiés`);
     
     // Lancer l'exécutable si configuré
@@ -298,6 +321,10 @@ async function performSync() {
     
   } catch (error) {
     console.error('❌ Erreur synchronisation:', error);
+    telemetry.recordError();
+    telemetry.finish();
+    analytics.addMetrics(telemetry.metrics);
+    reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
     mainWindow.webContents.send('update-status', `❌ Erreur: ${error.message}`);
     setTimeout(() => app.quit(), 3000);
   }
@@ -311,6 +338,11 @@ app.whenReady().then(async () => {
   const hadExistingProcess = await killExistingProcesses();
   
   createSplashWindow();
+
+  // Rapport santé initial
+  const health = HealthChecker.basicReport(config);
+  logger.log('info', 'Health check', health);
+  mainWindow.webContents.send('health-report', health);
   
   // Message informatif si processus tué
   if (hadExistingProcess) {

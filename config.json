@@ -17,5 +17,6 @@
   "executeAfterSync": "C:\\Target\\app.exe",
   "appName": "Mon Application",
   "appDescription": "Synchronisation et lancement automatique",
-  "parallelCopies": 4
+  "parallelCopies": 4,
+  "telemetryGranularity": "summary"
 }
