@@ -120,26 +120,6 @@ async function killExistingProcesses() {
   });
 }
 
-// Créer les répertoires nécessaires
-async function ensureDirectories() {
-  try {
-    if (!await fs.pathExists(config.sourceDirectory)) {
-      console.log(`⚠️  Répertoire source inexistant: ${config.sourceDirectory}`);
-      throw new Error(`Répertoire source introuvable: ${config.sourceDirectory}`);
-    }
-
-    if (!await fs.pathExists(config.targetDirectory)) {
-      console.log(`📁 Création du répertoire de destination: ${config.targetDirectory}`);
-      await fs.ensureDir(config.targetDirectory);
-      console.log('✅ Répertoire de destination créé');
-    }
-
-    return true;
-  } catch (error) {
-    console.error('❌ Erreur répertoires:', error.message);
-    throw error;
-  }
-}
 
 // Charger la configuration externe (optimisé)
 async function loadConfig() {
