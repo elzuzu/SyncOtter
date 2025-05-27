@@ -384,7 +384,23 @@ module.exports = { Logger };
         })) | Out-Null
         Wait-AndCleanupJobs $jobs
     } else {
-        Write-ColorText "   ⚠️ TypeScript non disponible, compilation ignorée" $Yellow
+        Write-ColorText "   ⚠️ TypeScript non disponible, tentative fallback" $Yellow
+        $nodeScript = @'
+const fs = require("fs");
+const tsFile = "src/preload.ts";
+const jsFile = "src/preload.js";
+let source = fs.readFileSync(tsFile, "utf8");
+try {
+  const ts = require("typescript");
+  const result = ts.transpileModule(source, { compilerOptions: { module: "CommonJS", target: "ES2020", esModuleInterop: true } });
+  fs.writeFileSync(jsFile, result.outputText);
+} catch(e) {
+  source = source.replace(/import\s+\{([^}]+)\}\s+from\s+['"]electron['"];?/, 'const {$1} = require("electron");');
+  source = source.replace(/:\s*[^=,)]+/g, '');
+  fs.writeFileSync(jsFile, source);
+}
+'@
+        node -e $nodeScript
     }
 
     if ($jobs.Count -gt 0) {
