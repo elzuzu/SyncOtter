@@ -41,16 +41,22 @@ function Write-Log {
 }
 
 function Invoke-WithRetry {
-    param([ScriptBlock]$Action, [string]$Name)
+    param(
+        [ScriptBlock]$Action,
+        [string]$Name,
+        [switch]$Npm
+    )
     $attempt = 0
     while($attempt -lt 3){
         try{
             & $Action
+            if($LASTEXITCODE -ne 0){ throw }
             return
         }catch{
             $attempt++
             Write-Log 'WARN' "Echec $Name tentative $attempt" 'RETRY'
             Stop-BlockingProcesses
+            if($Npm){ npm cache clean --force | Out-Null }
             if($attempt -ge 3){ throw }
             Start-Sleep -Seconds 1
         }
@@ -59,6 +65,22 @@ function Invoke-WithRetry {
 
 function Stop-BlockingProcesses {
     Get-Process node*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+function Wait-AndCleanupJobs {
+    param([System.Collections.ArrayList]$Jobs)
+    if($Jobs.Count -eq 0){ return }
+    Wait-Job $Jobs
+    foreach($j in $Jobs){
+        if($j.State -eq 'Failed'){
+            $err = Receive-Job $j -ErrorAction SilentlyContinue
+            Remove-Job $j
+            throw $err
+        }
+        Receive-Job $j | Out-Null
+        Remove-Job $j
+    }
+    $Jobs.Clear()
 }
 
 function Write-ColorText($Text, $Color) {
@@ -103,6 +125,17 @@ function Clean-ElectronBuilderCache {
         }
     }
 }
+# Vérification de l'état npm
+function Test-NpmHealth {
+    try {
+        npm ls --depth=0 --json | Out-Null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 
 
 # Détection automatique de l'architecture
@@ -314,34 +347,48 @@ module.exports = { Logger };
             Remove-Item -Path "node_modules" -Recurse -Force -ErrorAction SilentlyContinue
         }
         npm cache clean --force | Out-Null
-        $jobs += Start-Job -ArgumentList $Stealth -ScriptBlock {
+        $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
             param($s)
             if ($s) { npm install | Out-Null } else { npm install }
             if ($LASTEXITCODE -ne 0) { throw "deps" }
-        }
+        })) | Out-Null
+        Wait-AndCleanupJobs $jobs
         $installed = $true
     }
 
+    if (-not (Test-NpmHealth)) {
+        Write-ColorText "   ⚠️ Conflits npm détectés, tentative de résolution..." $Yellow
+        Invoke-WithRetry { npm install --legacy-peer-deps } 'npm-fix' -Npm
+    }
+
     Write-ColorText "`n📝 Compilation de preload.ts..." $Yellow
+    $tscAvailable = $true
     if (-not (Test-Path "node_modules\typescript")) {
         Write-ColorText "   📦 Installation de TypeScript et types Electron..." $Yellow
-        npm install --save-dev typescript @types/electron @types/node
-        if ($LASTEXITCODE -ne 0) { throw "Impossible d'installer TypeScript" }
-    }
-    $jobs += Start-Job -ArgumentList $Stealth -ScriptBlock {
-        param($s)
-        $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
-        if ($s) { 
-            Invoke-Expression $tscCommand | Out-Null 
-        } else { 
-            Invoke-Expression $tscCommand 
+        Invoke-WithRetry { npm install --save-dev typescript @types/electron @types/node } 'install-ts' -Npm
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path "node_modules\typescript")) {
+            Write-ColorText "   ⚠️ Installation TypeScript échouée" $Yellow
+            $tscAvailable = $false
         }
-        if ($LASTEXITCODE -ne 0) { throw "tsc" }
+    }
+    if ($tscAvailable) {
+        $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
+            param($s)
+            $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
+            if ($s) {
+                Invoke-Expression $tscCommand | Out-Null
+            } else {
+                Invoke-Expression $tscCommand
+            }
+            if ($LASTEXITCODE -ne 0) { throw "tsc" }
+        })) | Out-Null
+        Wait-AndCleanupJobs $jobs
+    } else {
+        Write-ColorText "   ⚠️ TypeScript non disponible, compilation ignorée" $Yellow
     }
 
     if ($jobs.Count -gt 0) {
-        Wait-Job $jobs
-        foreach($j in $jobs){ Receive-Job $j | Out-Null }
+        Wait-AndCleanupJobs $jobs
         Write-ColorText "✅ Tâches parallèles terminées" $Green
         if ($installed) { Write-ColorText "✅ Dépendances installées" $Green }
     }
