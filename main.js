@@ -12,9 +12,9 @@ const versionManager = require('./version-manager');
 
 // Modules d'optimisation réseau
 const NetworkOptimizer = require('./NetworkOptimizer');
-const TransferManager = require('./TransferManager');
 const CacheManager = require('./CacheManager');
 const ErrorRecovery = require('./ErrorRecovery');
+const { ensureDirectories, scanSourceFiles, copyFileIfNeeded } = require('./shared/sync-core');
 
 // Relance depuis le dossier temporaire si besoin
 NetworkOptimizer.relaunchFromTempIfNeeded();
@@ -46,13 +46,14 @@ function safeSend(channel, data, attempt = 0) {
 }
 
 let shuttingDown = false;
-function gracefulShutdown() {
+async function gracefulShutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   try {
     telemetry?.finish();
     if (telemetry) analytics.addMetrics(telemetry.metrics);
-    reportGenerator.generate({ metrics: telemetry?.metrics || {}, health: HealthChecker.basicReport(config) });
+    const health = await HealthChecker.basicReport(config);
+    reportGenerator.generate({ metrics: telemetry?.metrics || {}, health });
   } catch (err) {
     console.error('Erreur lors du graceful shutdown:', err);
   }
@@ -207,69 +208,6 @@ function createSplashWindow() {
   });
 }
 
-function shouldExclude(filePath) {
-  const rel = path.relative(config.sourceDirectory, filePath);
-  const parts = rel.split(path.sep);
-  if (parts.some(p => config.excludeDirectories?.includes(p))) return true;
-  if (config.excludePatterns) {
-    return config.excludePatterns.some(pattern => {
-      const regex = new RegExp(pattern.replace(/\*/g, '.*'));
-      return regex.test(path.basename(filePath));
-    });
-  }
-  return false;
-}
-
-async function scanSourceFiles() {
-  const files = [];
-
-  async function scanDir(dir) {
-    const items = await fs.readdir(dir);
-
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stat = await fs.stat(fullPath);
-
-      if (stat.isDirectory()) {
-        if (!shouldExclude(fullPath)) {
-          await scanDir(fullPath);
-        }
-      } else {
-        if (!shouldExclude(fullPath)) {
-          files.push(fullPath);
-        }
-      }
-    }
-  }
-
-  await scanDir(config.sourceDirectory);
-  return files;
-}
-
-async function copyFileIfNeeded(sourceFile, cache) {
-  const relativePath = path.relative(config.sourceDirectory, sourceFile);
-  const targetFile = path.join(config.targetDirectory, relativePath);
-
-  try {
-    await fs.ensureDir(path.dirname(targetFile));
-    const stat = await fs.stat(sourceFile);
-
-    if (await fs.pathExists(targetFile)) {
-      if (!CacheManager.needsSync(sourceFile, stat, cache) && await ErrorRecovery.verifyIntegrity(sourceFile, targetFile)) {
-        return false;
-      }
-    }
-    await TransferManager.transferFile(sourceFile, targetFile, { rateLimit: config.rateLimit });
-    CacheManager.updateCacheEntry(cache, sourceFile, stat);
-    telemetry.recordFileCopied(stat.size);
-    return true;
-
-  } catch (error) {
-    console.error(`Erreur copie ${sourceFile}:`, error);
-    telemetry.recordError();
-    return false;
-  }
-}
 
 async function performSync() {
   try {
@@ -279,13 +217,13 @@ async function performSync() {
     logger.log('info', 'Début de la synchronisation');
     safeSend('update-status', 'Vérification des répertoires...');
 
-    await ensureDirectories();
+    await ensureDirectories(config);
 
     const cache = await CacheManager.loadCache();
 
     safeSend('update-status', 'Analyse des fichiers...');
 
-    const sourceFiles = await scanSourceFiles();
+    const sourceFiles = await scanSourceFiles(config);
     console.log(`📁 ${sourceFiles.length} fichiers trouvés`);
 
     if (sourceFiles.length === 0) {
@@ -299,7 +237,7 @@ async function performSync() {
 
     async function processBatch(files) {
       const promises = files.map(async (file) => {
-        const wasCopied = await copyFileIfNeeded(file, cache);
+        const wasCopied = await copyFileIfNeeded(file, config, cache, telemetry);
         if (wasCopied) copied++;
 
         completed++;
@@ -328,7 +266,8 @@ async function performSync() {
     console.log(`✅ Synchronisation terminée: ${copied} fichiers copiés`);
     telemetry.finish();
     analytics.addMetrics(telemetry.metrics);
-    const reportFile = reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
+    const health = await HealthChecker.basicReport(config);
+    const reportFile = reportGenerator.generate({ metrics: telemetry.metrics, health });
     logger.log('info', `Rapport généré: ${reportFile}`);
     logger.log('info', `Synchronisation terminée: ${copied} fichiers`);
     safeSend('telemetry-summary', telemetry.metrics);
@@ -362,7 +301,8 @@ async function performSync() {
     telemetry.recordError();
     telemetry.finish();
     analytics.addMetrics(telemetry.metrics);
-    reportGenerator.generate({ metrics: telemetry.metrics, health: HealthChecker.basicReport(config) });
+    const errorHealth = await HealthChecker.basicReport(config);
+    reportGenerator.generate({ metrics: telemetry.metrics, health: errorHealth });
     setTimeout(() => gracefulShutdown(), 3000);
   }
 }
@@ -377,7 +317,7 @@ app.whenReady().then(async () => {
 
   createSplashWindow();
 
-  const health = HealthChecker.basicReport(config);
+  const health = await HealthChecker.basicReport(config);
   logger.log('info', 'Health check', health);
   safeSend('health-report', health);
 
