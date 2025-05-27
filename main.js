@@ -3,6 +3,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, exec } = require('child_process');
+const versionManager = require('./version-manager');
 
 // Désactiver les warnings et optimiser les performances
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
@@ -306,6 +307,9 @@ async function performSync() {
 // Événements Electron (optimisés avec gestion processus)
 app.whenReady().then(async () => {
   loadConfig();
+  versionManager.checkForUpdates().catch(err =>
+    console.error('Update check failed:', err)
+  );
   
   // Vérifier et tuer les processus existants
   const hadExistingProcess = await killExistingProcesses();
