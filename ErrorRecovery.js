@@ -63,7 +63,7 @@ async function resumeCopy(src, dest) {
   const stat = await fs.stat(src);
   const destDir = path.dirname(dest);
   await fs.ensureDir(destDir);
-  await fs.access(destDir, fs.constants.W_OK);
+  await fs.promises.access(destDir, fs.constants.W_OK);
   const hasSpace = await checkDiskSpace(destDir, stat.size);
   if (!hasSpace) throw new Error('Insufficient disk space');
 
