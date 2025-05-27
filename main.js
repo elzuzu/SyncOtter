@@ -146,7 +146,7 @@ async function loadConfig() {
 function createSplashWindow() {
   mainWindow = new BrowserWindow({
     width: 400,
-    height: 280, // Hauteur augmentée pour la section app
+    height: 320, // Augmenté pour offrir plus d'espace
     frame: false,
     alwaysOnTop: true,
     transparent: true,
