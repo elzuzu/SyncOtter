@@ -60,6 +60,11 @@ cp package-pkg.json package.json
 ```
 Résultat : `pkg-dist/SyncOtter-Single.exe`
 
+### Build optimisé avec UPX
+```powershell
+./build-pkg.ps1 -UPX -Test
+```
+
 ### Lancement optimisé :
 ```powershell
 # Lancement direct (gestion auto des processus)
