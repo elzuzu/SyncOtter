@@ -86,7 +86,7 @@ function Wait-AndCleanupJobs {
         Receive-Job $j | Out-Null
         Remove-Job $j
     }
-    if ($Jobs -is [System.Collections.IList]) { $Jobs.Clear() }
+    if ($Jobs -is [System.Collections.ArrayList]) { $Jobs.Clear() }
 }
 
 function Write-ColorText($Text, $Color) {
@@ -372,7 +372,7 @@ module.exports = { Logger };
         Write-ColorText "   ✓ Module logger créé: $loggerPath" $Green
     }
 
-    $jobs = @()
+    $jobs = New-Object System.Collections.ArrayList
 
     if ($Clean) {
         Write-ColorText "`n🧹 Nettoyage complet..." $Yellow
@@ -401,11 +401,11 @@ module.exports = { Logger };
             Remove-Item -Path "node_modules" -Recurse -Force -ErrorAction SilentlyContinue
         }
         npm cache clean --force | Out-Null
-        $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
+        $null = $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
             param($s)
             if ($s) { npm install | Out-Null } else { npm install }
             if ($LASTEXITCODE -ne 0) { throw "deps" }
-        })) | Out-Null
+        }))
         Wait-AndCleanupJobs $jobs
         $installed = $true
     }
@@ -427,7 +427,7 @@ module.exports = { Logger };
     }
     if ($tscAvailable) {
         if (Test-Path "src\preload.ts") {
-            $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
+            $null = $jobs.Add((Start-Job -ArgumentList $Stealth -ScriptBlock {
                 param($s)
                 $tscCommand = "npx tsc src\preload.ts --outDir src --module commonjs --target es2020 --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node"
                 if ($s) {
@@ -436,7 +436,7 @@ module.exports = { Logger };
                     Invoke-Expression $tscCommand
                 }
                 if ($LASTEXITCODE -ne 0) { throw \"tsc\" }
-            })) | Out-Null
+            }))
             Wait-AndCleanupJobs $jobs
         } else {
             Write-ColorText "⚠️ preload.ts manquant, utilisation du JS existant" $Yellow
