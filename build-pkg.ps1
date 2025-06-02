@@ -14,8 +14,14 @@ function Get-DefaultNodeTarget {
         $ver = (node -v 2>$null).Trim()
         if ($LASTEXITCODE -eq 0 -and $ver) {
             if ($ver.StartsWith('v')) { $ver = $ver.Substring(1) }
-            $major = $ver.Split('.')[0]
-            return "node$major-win-x64"
+            $major = [int]$ver.Split('.')[0]
+
+            # pkg 5.x ne supporte que Node 16/18
+            if ($major -ge 16 -and $major -le 18) {
+                return "node$major-win-x64"
+            }
+
+            Write-Col "⚠️ Node $major non supporté par pkg, fallback vers node18" $Yellow
         }
     } catch {}
     return 'node18-win-x64'
