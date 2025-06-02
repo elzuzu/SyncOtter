@@ -58,6 +58,10 @@ npm start
 cp package-pkg.json package.json
 # la cible Node est déterminée à partir de la version installée
 # on peut la surcharger via $env:PKG_NODE_TARGET
+# **Note :** pkg 5.x ne gère pas encore Node.js 20. Si vous utilisez Node 20 ou
+# supérieur, le script retombera automatiquement sur `node18-win-x64`. Vous
+# pouvez aussi définir manuellement `PKG_NODE_TARGET=node18-win-x64` pour éviter
+# l'avertissement.
 ./build-pkg.ps1
 ```
 Résultat : `pkg-dist/SyncOtter-Single.exe`
