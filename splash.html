@@ -230,18 +230,10 @@
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            let ipcRenderer;
-            if (typeof require !== 'undefined') {
-                try {
-                    ({ ipcRenderer } = require('electron'));
-                } catch (err) {
-                    console.error('Chargement IPC échoué:', err);
-                }
-            }
-
-            if (!ipcRenderer) {
-                console.error('Environnement Electron non détecté');
-                document.getElementById('status').textContent = 'Erreur: IPC indisponible';
+            const api = (window as any).electronAPI;
+            if (!api) {
+                console.error('Electron API non disponible');
+                document.getElementById('status').textContent = 'Erreur: API indisponible';
                 return;
             }
 
@@ -255,7 +247,7 @@
 
             const safeOn = (channel, handler) => {
                 try {
-                    ipcRenderer.on(channel, (event, data) => {
+                    api.on(channel, (data) => {
                         try { handler(data); } catch (err) { console.error('Handler error', err); }
                     });
                 } catch (err) {
