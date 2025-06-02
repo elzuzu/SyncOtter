@@ -1,7 +1,10 @@
 param(
     [switch]$Clean = $true,
     [switch]$Compress = $true,
-    [string]$Target = 'node18-win-x64'
+    [string]$Target = 'node18-win-x64',
+    [switch]$UPX = $false,
+    [switch]$Test = $false,
+    [string]$UPXPath = 'upx'
 )
 
 $Cyan = [ConsoleColor]::Cyan
@@ -19,27 +22,67 @@ function Write-Col($text, $color){
 
 Write-Col "🚀 Build SyncOtter single-file (pkg)" $Cyan
 
-if ($Clean) {
-    Write-Col "🧹 Nettoyage..." $Yellow
-    if (Test-Path 'pkg-dist') { Remove-Item 'pkg-dist' -Recurse -Force -ErrorAction SilentlyContinue }
-    if (Test-Path 'node_modules') { Remove-Item 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue }
+try {
+    if ($Clean) {
+        Write-Col "🧹 Nettoyage..." $Yellow
+        if (Test-Path 'pkg-dist') { Remove-Item 'pkg-dist' -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path 'node_modules') { Remove-Item 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    if (-not (Get-Command pkg -ErrorAction SilentlyContinue)) {
+        Write-Col "📦 Installation de pkg..." $Yellow
+        npm install -g pkg
+    }
+
+    Write-Col "📥 Installation des dépendances production" $Yellow
+    $env:NPM_CONFIG_PROGRESS = 'false'
+    $env:NPM_CONFIG_FUND = 'false'
+    if (Test-Path 'package-lock.json') {
+        npm ci --only=production
+    } else {
+        npm install --production
+    }
+    if ($LASTEXITCODE -ne 0) { throw "npm install a échoué" }
+
+    # Nettoyage avancé de node_modules
+    Write-Col "🧹 Nettoyage avancé de node_modules" $Yellow
+    Get-ChildItem -Path node_modules -Recurse -Directory -Filter test, tests, __tests__, doc, docs 2>$null | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -Path node_modules -Recurse -Include *.md, *.markdown, *.ts 2>$null | Remove-Item -Force -ErrorAction SilentlyContinue
+
+    $compressArg = if ($Compress) { '--compress Brotli' } else { '' }
+    $pkgCmd = "pkg main-cli.js --targets $Target $compressArg --no-bytecode --output pkg-dist/SyncOtter-Single.exe"
+    Write-Col $pkgCmd $Gray
+    Invoke-Expression $pkgCmd
+    if ($LASTEXITCODE -ne 0) { throw 'pkg a échoué' }
+
+    $exe = Get-Item 'pkg-dist/SyncOtter-Single.exe'
+    $size = [Math]::Round($exe.Length / 1MB, 2)
+    Write-Col "✅ Exécutable généré: $($exe.FullName) ($size MB)" $Green
+
+    if ($UPX) {
+        try {
+            Write-Col "🗜️ Compression UPX..." $Yellow
+            & $UPXPath $exe.FullName --best --lzma | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $exe = Get-Item $exe.FullName
+                $size = [Math]::Round($exe.Length / 1MB, 2)
+                Write-Col "✅ UPX terminé ($size MB)" $Green
+            } else {
+                Write-Col "⚠️ UPX a échoué" $Yellow
+            }
+        } catch {
+            Write-Col "⚠️ UPX non disponible" $Yellow
+        }
+    }
+
+    if ($Test) {
+        Write-Col "🚀 Test de démarrage..." $Yellow
+        $time = (Measure-Command { & $exe.FullName --help >$null }).TotalMilliseconds
+        Write-Col "⏱️ Démarrage en $([math]::Round($time)) ms" $Green
+    }
+
+} catch {
+    Write-Col "❌ Erreur: $($_.Exception.Message)" $Red
+    exit 1
 }
 
-if (-not (Get-Command pkg -ErrorAction SilentlyContinue)) {
-    Write-Col "📦 Installation de pkg..." $Yellow
-    npm install -g pkg
-}
-
-Write-Col "📥 Installation des dépendances production" $Yellow
-npm install --production
-if ($LASTEXITCODE -ne 0) { throw "npm install a échoué" }
-
-$compressArg = if ($Compress) { '--compress Brotli' } else { '' }
-$pkgCmd = "pkg main-cli.js --targets $Target $compressArg --output pkg-dist/SyncOtter-Single.exe"
-Write-Col $pkgCmd $Gray
-Invoke-Expression $pkgCmd
-if ($LASTEXITCODE -ne 0) { throw 'pkg a échoué' }
-
-$exe = Get-Item 'pkg-dist/SyncOtter-Single.exe'
-$size = [Math]::Round($exe.Length / 1MB, 2)
-Write-Col "✅ Exécutable généré: $($exe.FullName) ($size MB)" $Green
