@@ -24,8 +24,15 @@ const analytics = new AnalyticsEngine();
 const logger = new AdvancedLogger();
 let config;
 
+function resolveConfigPath() {
+  if (process.pkg) {
+    return path.join(path.dirname(process.execPath), 'config.json');
+  }
+  return path.join(__dirname, '..', 'config.json');
+}
+
 async function loadConfig() {
-  const configPath = path.join(__dirname, '..', 'config.json');
+  const configPath = resolveConfigPath();
   if (!await fs.pathExists(configPath)) {
     throw new Error(`config.json manquant: ${configPath}`);
   }

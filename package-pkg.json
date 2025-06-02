@@ -1,0 +1,19 @@
+{
+  "name": "syncotter-cli",
+  "version": "1.0.0",
+  "bin": "main-cli.js",
+  "scripts": {
+    "build": "pkg main-cli.js --targets node18-win-x64 --compress Brotli --output pkg-dist/SyncOtter-Single.exe"
+  },
+  "pkg": {
+    "compression": "Brotli"
+  },
+  "dependencies": {
+    "fs-extra": "^11.2.0",
+    "ajv": "^8.12.0",
+    "proper-lockfile": "^4.1.2",
+    "yargs": "^17.7.2",
+    "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0"
+  }
+}
