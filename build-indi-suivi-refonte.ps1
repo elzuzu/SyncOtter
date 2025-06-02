@@ -118,19 +118,40 @@ function Invoke-UPXCompression {
 function Invoke-IndiSuiviOptimizations {
     Write-ColorText "`n🗜️ Optimisations spécifiques Indi-Suivi..." $Yellow
 
-    # Nettoyage des node_modules inutiles
+    # Nettoyage sélectif des node_modules
     if (Test-Path "node_modules") {
-        Write-ColorText "   🧹 Nettoyage node_modules..." $Gray
-        
-        # Supprimer les fichiers documentation
-        Get-ChildItem "node_modules" -Recurse -Include @("*.md", "*.txt", "LICENSE*", "CHANGELOG*", "README*", "*.d.ts") -File | 
-            Remove-Item -Force -ErrorAction SilentlyContinue
-        
-        # Supprimer les dossiers de test/docs
-        Get-ChildItem "node_modules" -Recurse -Directory -Include @("test", "tests", "docs", "examples", "demo", "samples", "benchmark", ".github", "coverage", ".nyc_output") | 
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        
-        Write-ColorText "   ✓ node_modules optimisé" $Green
+        Write-ColorText "   🧹 Nettoyage sélectif node_modules..." $Gray
+
+        # EXCLUSIONS CRITIQUES pour electron-builder
+        $criticalModules = @(
+            "*app-builder-lib*",
+            "*electron-builder*",
+            "*dmg-builder*",
+            "*electron-publish*",
+            "*dmg-license*"
+        )
+
+        # Nettoyage fichiers avec exclusions
+        Get-ChildItem "node_modules" -Recurse -Include @("*.md", "*.txt", "CHANGELOG*", "README*") -File |
+            Where-Object {
+                $exclude = $false
+                foreach ($critical in $criticalModules) {
+                    if ($_.FullName -like $critical) { $exclude = $true; break }
+                }
+                -not $exclude
+            } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+        # Nettoyage dossiers avec protections
+        Get-ChildItem "node_modules" -Recurse -Directory -Include @("test", "tests", "docs", "examples", "demo", "samples", "benchmark", ".github", "coverage", ".nyc_output") |
+            Where-Object {
+                $exclude = $false
+                foreach ($critical in $criticalModules) {
+                    if ($_.FullName -like $critical) { $exclude = $true; break }
+                }
+                -not $exclude
+            } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Write-ColorText "   ✓ node_modules optimisé (avec protections)" $Green
     }
 
     # Optimisation des builds Vite
@@ -428,9 +449,11 @@ try {
         $builderArgs = @(
             "--win",
             "--publish", "never",
-            "--config.compression=normal",
+            "--config.compression=maximum",
             "--config.nsis.oneClick=false",
-            "--config.nsis.allowElevation=true"
+            "--config.nsis.allowElevation=true",
+            "--config.directories.output=dist",
+            "--config.asar=true"
         )
 
         npx electron-builder @builderArgs
