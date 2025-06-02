@@ -60,7 +60,14 @@ try {
     $pkgCmd = "pkg main-cli.js --targets $Target $compressArg --no-bytecode --output pkg-dist/SyncOtter-Single.exe"
     Write-Col $pkgCmd $Gray
     Invoke-Expression $pkgCmd
-    if ($LASTEXITCODE -ne 0) { throw 'pkg a échoué' }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw 'pkg a échoué'
+    }
+
+    if (-not (Test-Path 'pkg-dist/SyncOtter-Single.exe')) {
+        throw "pkg n'a pas généré pkg-dist/SyncOtter-Single.exe"
+    }
 
     $exe = Get-Item 'pkg-dist/SyncOtter-Single.exe'
     $size = [Math]::Round($exe.Length / 1MB, 2)
