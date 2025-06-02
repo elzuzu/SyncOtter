@@ -39,37 +39,17 @@ node config-generator.js
 # 3. Tester en mode développement
 npm start
 
-# 4. Compiler l'exe ultra-léger
-.\build-app.ps1
-
-# 5. Déployer sur votre share/répertoire
-.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"
+# 4. Compiler l'exécutable
+.\build-indi-suivi-refonte.ps1
 ```
 
 ### Compilation express :
 ```powershell
-# Build ULTRA-LÉGER (recommandé pour share)
-npm run build-ultra
-
-# Build portable léger  
-npm run build-portable
+# Build complet
+.\build-indi-suivi-refonte.ps1
 
 # Test développement
 npm start
-```
-
-### Déploiement avec config personnalisé :
-```powershell
-# Déploiement simple
-.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"
-
-# Déploiement avec config personnalisé
-.\deploy-enterprise.ps1 -DestinationPath "C:\Tools\MySync" `
-             -SourceDir "\\server\releases\latest" `
-             -TargetDir "C:\Apps\MyApp" `
-             -AppToLaunch "C:\Apps\MyApp\app.exe" `
-             -AppName "Mon Application CRM" `
-             -AppDescription "Version depuis build server"
 ```
 
 ### Lancement optimisé :
@@ -127,26 +107,9 @@ npm start
 ## 🎯 Utilisation Type Share Réseau
 
 ### **Approche Simple :**
-1. **Build une fois** : `.\build-app.ps1`
-2. **Déployer** : `.\deploy-enterprise.ps1 -DestinationPath "\\server\tools\SyncOtter"`
-3. **Lancer depuis poste** : `\\server\tools\SyncOtter\SyncOtter-*.exe`
-
-### **Approche Multi-Configurations :**
-1. **Build une fois** : `.\build-app.ps1`
-2. **Déployer pour App A** : 
-   ```powershell
-   .\deploy-enterprise.ps1 -DestinationPath "\\server\tools\AppA" `
-                -SourceDir "\\build\AppA" `
-                -TargetDir "C:\Apps\AppA" `
-                -AppName "Application A"
-   ```
-3. **Déployer pour App B** :
-   ```powershell
-   .\deploy-enterprise.ps1 -DestinationPath "\\server\tools\AppB" `
-                -SourceDir "\\build\AppB" `
-                -TargetDir "C:\Apps\AppB" `
-                -AppName "Application B"
-   ```
+1. **Build une fois** : `.\build-indi-suivi-refonte.ps1`
+2. **Copier l'exécutable** sur votre partage réseau
+3. **Lancer depuis poste** : `\\server\tools\SyncOtter\Indi-Suivi.exe`
 
 ## 📊 Performance Mesurée
 
@@ -159,18 +122,12 @@ npm start
 
 ```powershell
 # BUILD
-.\build-app.ps1      # Ultra-léger portable
-npm run build-portable   # Portable standard  
-npm run build  # Installateur léger
+.\build-indi-suivi-refonte.ps1  # Build complet
 npm start        # Mode développement
 
-# DÉPLOIEMENT
-.\deploy-enterprise.ps1 -DestinationPath "C:\Tools"  # Déploiement simple
-.\deploy-enterprise.ps1 [params...]                  # Déploiement personnalisé
-
 # LANCEMENT
-SyncOtter-Ultra.exe                       # Lancement local
-\\server\tools\SyncOtter\SyncOtter-Ultra.exe  # Lancement depuis share
+Indi-Suivi.exe                       # Lancement local
+\\server\tools\SyncOtter\Indi-Suivi.exe  # Lancement depuis share
 ```
 
 ### Utilisation en ligne de commande
@@ -250,7 +207,5 @@ Ou compilée en exécutable via `npm run build` dans ce package.
 
 ## 🚀 Build & Deploy Revolution
 
-- `build-ultra-webpack` : packaging ultra-compact via Webpack+Brotli
-- `deploy-enterprise.ps1` : déploiement automatisé avec rollback
 - `config-generator.js` : génération de templates par environnement
 - Mise à jour automatique pilotée par `version-manager.js`
