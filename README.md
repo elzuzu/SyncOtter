@@ -56,6 +56,8 @@ npm start
 ### Build single-file avec PKG
 ```powershell
 cp package-pkg.json package.json
+# la cible Node est déterminée à partir de la version installée
+# on peut la surcharger via $env:PKG_NODE_TARGET
 ./build-pkg.ps1
 ```
 Résultat : `pkg-dist/SyncOtter-Single.exe`

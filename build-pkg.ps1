@@ -1,11 +1,29 @@
 param(
     [switch]$Clean = $true,
     [switch]$Compress = $true,
-    [string]$Target = 'node18-win-x64',
+    [string]$Target,
     [switch]$UPX = $false,
     [switch]$Test = $false,
     [string]$UPXPath = 'upx'
 )
+
+function Get-DefaultNodeTarget {
+    $envTarget = $env:PKG_NODE_TARGET
+    if ($envTarget) { return $envTarget }
+    try {
+        $ver = (node -v 2>$null).Trim()
+        if ($LASTEXITCODE -eq 0 -and $ver) {
+            if ($ver.StartsWith('v')) { $ver = $ver.Substring(1) }
+            $major = $ver.Split('.')[0]
+            return "node$major-win-x64"
+        }
+    } catch {}
+    return 'node18-win-x64'
+}
+
+if (-not $Target) {
+    $Target = Get-DefaultNodeTarget
+}
 
 $Cyan = [ConsoleColor]::Cyan
 $Green = [ConsoleColor]::Green
