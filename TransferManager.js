@@ -1,11 +1,9 @@
 const fs = require('fs-extra');
 const path = require('path');
 const zlib = require('zlib');
-const { pipeline, Transform } = require('stream');
-const { promisify } = require('util');
+const { Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 const ErrorRecovery = require('./ErrorRecovery');
-
-const pump = promisify(pipeline);
 
 class Throttle extends Transform {
   constructor(rate) {
@@ -36,26 +34,12 @@ async function compressCopy(src, dest) {
   const gzip = zlib.createGzip();
   const writeTemp = fs.createWriteStream(temp);
   try {
-    await pump(read1, gzip, writeTemp);
+    await pipeline(read1, gzip, writeTemp);
     const read2 = fs.createReadStream(temp);
     const gunzip = zlib.createGunzip();
     const writeDest = fs.createWriteStream(dest);
-    try {
-      await pump(read2, gunzip, writeDest);
-    } finally {
-      try { read2.destroy(); } catch {}
-      try { gunzip.destroy(); } catch {}
-      try { writeDest.destroy(); } catch {}
-    }
-  } catch (err) {
-    try { read1.destroy(); } catch {}
-    try { gzip.destroy(); } catch {}
-    try { writeTemp.destroy(); } catch {}
-    throw err;
+    await pipeline(read2, gunzip, writeDest);
   } finally {
-    try { read1.destroy(); } catch {}
-    try { gzip.destroy(); } catch {}
-    try { writeTemp.destroy(); } catch {}
     try { await fs.remove(temp); } catch {}
   }
 }
@@ -66,13 +50,7 @@ async function chunkedCopy(src, dest, opts = {}) {
   const write = fs.createWriteStream(dest);
   const throttle = rateLimit ? new Throttle(rateLimit) : null;
   const streams = throttle ? [read, throttle, write] : [read, write];
-  try {
-    await pump(...streams);
-  } finally {
-    try { read.destroy(); } catch {}
-    if (throttle) try { throttle.destroy(); } catch {}
-    try { write.destroy(); } catch {}
-  }
+  await pipeline(...streams);
 }
 
 async function transferFile(src, dest, opts = {}) {

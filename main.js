@@ -15,14 +15,13 @@ const NetworkOptimizer = require('./NetworkOptimizer');
 const CacheManager = require('./CacheManager');
 const ErrorRecovery = require('./ErrorRecovery');
 const { ensureDirectories, scanSourceFiles, copyFileIfNeeded } = require('./shared/sync-core');
+const Ajv = require('ajv');
 
 // Relance depuis le dossier temporaire si besoin
 NetworkOptimizer.relaunchFromTempIfNeeded();
 
-// Désactiver les warnings et optimiser les performances
-process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
-app.commandLine.appendSwitch('--no-sandbox');
-app.commandLine.appendSwitch('--disable-web-security');
+// Configuration Electron sécurisée
+app.commandLine.appendSwitch('disable-site-isolation-trials');
 
 let mainWindow;
 let config;
@@ -32,14 +31,19 @@ const reportGenerator = new ReportGenerator();
 const logger = new AdvancedLogger();
 
 const IPC_MAX_RETRIES = 3;
+const pendingRetries = new Map();
 function safeSend(channel, data, attempt = 0) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
     mainWindow.webContents.send(channel, data);
+    pendingRetries.delete(channel);
   } catch (err) {
     if (attempt < IPC_MAX_RETRIES) {
-      setTimeout(() => safeSend(channel, data, attempt + 1), 200);
+      clearTimeout(pendingRetries.get(channel));
+      const id = setTimeout(() => safeSend(channel, data, attempt + 1), 200);
+      pendingRetries.set(channel, id);
     } else {
+      pendingRetries.delete(channel);
       console.error(`IPC send failed for ${channel}:`, err);
     }
   }
@@ -62,64 +66,6 @@ async function gracefulShutdown() {
 
 ipcMain.on('request-shutdown', gracefulShutdown);
 
-// Vérifier et tuer les processus SyncOtter existants
-async function killExistingProcesses() {
-  return new Promise((resolve) => {
-    const currentPid = process.pid;
-    const exePath = process.execPath.toLowerCase();
-
-    exec('tasklist /FI "IMAGENAME eq SyncOtter*" /FO CSV', (error, stdout) => {
-      if (error || !stdout.includes('SyncOtter')) {
-        return resolve(false); // Pas de processus existant
-      }
-
-      const lines = stdout.split('\n').slice(1);
-      const processes = lines
-        .filter(line => line.includes('SyncOtter'))
-        .map(line => {
-          const parts = line.split('\",\"');
-          return {
-            name: parts[0]?.replace('"', ''),
-            pid: parseInt(parts[1]) || 0
-          };
-        })
-        .filter(proc => proc.pid && proc.pid !== currentPid);
-
-      if (processes.length === 0) {
-        return resolve(false);
-      }
-
-      const checks = processes.map(p => new Promise(res => {
-        exec(`wmic process where processid=${p.pid} get CommandLine /FORMAT:CSV`, (e, out) => {
-          if (!e && out.toLowerCase().includes(exePath)) {
-            res(p.pid);
-          } else {
-            res(null);
-          }
-        });
-      }));
-
-      Promise.all(checks).then(validPids => {
-        const pidsToKill = validPids.filter(Boolean);
-        if (pidsToKill.length === 0) {
-          return resolve(false);
-        }
-
-        console.log('🔄 SyncOtter déjà en cours, arrêt des processus existants...');
-        logger.log('info', 'Instance existante détectée, arrêt en cours');
-
-        exec(`taskkill /F /PID ${pidsToKill.join(' ')}`, (killError) => {
-          if (!killError) {
-            console.log('✅ Processus existants fermés');
-            logger.log('info', 'Processus existants fermés');
-          }
-          setTimeout(() => resolve(true), 500);
-        });
-      });
-    });
-  });
-}
-
 
 // Charger la configuration externe (optimisé)
 async function loadConfig() {
@@ -140,6 +86,20 @@ async function loadConfig() {
     }
 
     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const ajv = new Ajv();
+    const schema = {
+      type: 'object',
+      required: ['sourceDirectory', 'targetDirectory'],
+      properties: {
+        sourceDirectory: { type: 'string', minLength: 1 },
+        targetDirectory: { type: 'string', minLength: 1 },
+        parallelCopies: { type: 'integer', minimum: 1, maximum: 64 }
+      }
+    };
+    const validate = ajv.compile(schema);
+    if (!validate(config)) {
+      throw new Error(`Config invalide: ${JSON.stringify(validate.errors)}`);
+    }
     console.log('✅ Configuration chargée');
 
     const unc = NetworkOptimizer.isUNCPath(config.sourceDirectory)
@@ -178,8 +138,11 @@ function createSplashWindow() {
     center: true,
     show: false, // Optimisation: afficher après chargement
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      allowRunningInsecureContent: false,
+      preload: path.join(__dirname, 'src', 'preload.js')
     }
   });
   mainWindow.loadFile(path.join(__dirname, 'splash.html'));
@@ -293,8 +256,6 @@ app.whenReady().then(async () => {
     console.error('Update check failed:', err)
   );
 
-  const hadExistingProcess = await killExistingProcesses();
-
   createSplashWindow();
 
   const health = await HealthChecker.basicReport(config);
@@ -303,11 +264,6 @@ app.whenReady().then(async () => {
 
   NetworkOptimizer.registerTempCleanup(app);
 
-  if (hadExistingProcess) {
-    setTimeout(() => {
-      safeSend('update-status', '🔄 Processus précédent fermé...');
-    }, 200);
-  }
 
   setImmediate(() => {
     performSync();

@@ -230,18 +230,10 @@
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            let ipcRenderer;
-            if (typeof require !== 'undefined') {
-                try {
-                    ({ ipcRenderer } = require('electron'));
-                } catch (err) {
-                    console.error('Chargement IPC échoué:', err);
-                }
-            }
-
-            if (!ipcRenderer) {
-                console.error('Environnement Electron non détecté');
-                document.getElementById('status').textContent = 'Erreur: IPC indisponible';
+            const api = window.electronAPI;
+            if (!api) {
+                console.error('Electron API non disponible');
+                document.getElementById('status').textContent = 'Erreur: API indisponible';
                 return;
             }
 
@@ -253,17 +245,7 @@
             const appNameText = document.getElementById('appNameText');
             const appDescription = document.getElementById('appDescription');
 
-            const safeOn = (channel, handler) => {
-                try {
-                    ipcRenderer.on(channel, (event, data) => {
-                        try { handler(data); } catch (err) { console.error('Handler error', err); }
-                    });
-                } catch (err) {
-                    console.error('Erreur ajout listener', err);
-                }
-            };
-
-            safeOn('app-info', (data) => {
+            api.on('app-info', (data) => {
                 if (data.appName) {
                     appNameText.textContent = data.appName;
                     appDescription.textContent = data.appDescription || 'Prêt pour le lancement';
@@ -276,7 +258,7 @@
                 }
             });
 
-            safeOn('update-status', (message) => {
+            api.on('update-status', (message) => {
                 statusEl.textContent = message;
                 statusEl.className = 'status-text';
                 if (message.includes('❌') || message.includes('Erreur')) {
@@ -288,7 +270,7 @@
                 }
             });
 
-            safeOn('update-progress', (data) => {
+            api.on('update-progress', (data) => {
                 progressContainer.classList.add('visible');
                 progressBar.style.width = data.progress + '%';
                 statusEl.textContent = 'Synchronisation en cours...';
@@ -298,8 +280,7 @@
                     progressDetails.textContent = '';
                 }
             });
-
-            safeOn('telemetry-summary', (data) => {
+            api.on('telemetry-summary', (data) => {
                 const summary = `Temps: ${Math.round(data.durationMs/1000)}s • Fichiers: ${data.filesCopied} • Erreurs: ${data.errors}`;
                 const summaryEl = document.createElement('div');
                 summaryEl.textContent = summary;

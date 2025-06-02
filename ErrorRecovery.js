@@ -20,7 +20,10 @@ function checkDiskSpace(dir, required) {
   return new Promise((resolve) => {
     let cmd;
     if (process.platform === 'win32') {
-      const drive = path.parse(path.resolve(dir)).root.replace(/\\$/, '');
+      const drive = path
+        .parse(path.resolve(dir))
+        .root.replace(/\\$/, '')
+        .replace(/'/g, "''");
       cmd = `wmic logicaldisk where Caption='${drive}' get FreeSpace /value`;
     } else {
       cmd = `df -Pk \"${dir}\"`;
