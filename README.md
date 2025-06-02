@@ -41,6 +41,7 @@ npm start
 
 # 4. Compiler l'exécutable
 .\build-indi-suivi-refonte.ps1
+> **Note** : lancez ce script depuis le dossier `SyncOtter` pour que les chemins soient correctement résolus.
 ```
 
 ### Compilation express :

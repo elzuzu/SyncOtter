@@ -147,7 +147,7 @@ function Invoke-IndiSuiviOptimizations {
 }
 
 # Obtenir le répertoire racine du projet
-$projectRoot = Split-Path -Parent $PSScriptRoot
+$projectRoot = $PSScriptRoot
 Write-ColorText "🚀 Build Indi-Suivi - Projet: $projectRoot" $Cyan
 
 # Se déplacer dans le répertoire racine
