@@ -449,6 +449,7 @@ try {
         $builderArgs = @(
             "--win",
             "--publish", "never",
+            "--config.win.sign=false",
             "--config.compression=maximum",
             "--config.nsis.oneClick=false",
             "--config.nsis.allowElevation=true",
