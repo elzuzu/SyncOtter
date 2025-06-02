@@ -3,6 +3,18 @@ const path = require('path');
 const os = require('os');
 const { exec, spawn } = require('child_process');
 
+const activeOperations = new Set();
+
+function executeWithCleanup(cmd, options = {}) {
+  return new Promise((resolve, reject) => {
+    const proc = exec(cmd, options, (err, stdout) => {
+      activeOperations.delete(proc);
+      if (err) reject(err); else resolve(stdout);
+    });
+    activeOperations.add(proc);
+  });
+}
+
 function isUNCPath(p) {
   return /^\\\\/.test(p);
 }
@@ -12,22 +24,21 @@ function extractHost(uncPath) {
 }
 
 async function pingHost(host, timeout = 5000) {
-  return new Promise((resolve) => {
-    if (!host) return resolve(null);
-    const cmd = process.platform === 'win32' ? `ping -n 3 ${host}` : `ping -c 3 ${host}`;
-    exec(cmd, { timeout }, (err, stdout) => {
-      if (err) {
-        console.error(`ping error for ${host}:`, err.message);
-        return resolve(null);
-      }
-      const regexWin = /Average = ([0-9]+)ms/;
-      const regexUnix = /= ([0-9.]+)\/\d+\/\d+/;
-      let match = stdout.match(regexWin);
-      if (!match) match = stdout.match(regexUnix);
-      if (match) return resolve(parseFloat(match[1]));
-      resolve(null);
-    });
-  });
+  if (!host) return null;
+  try {
+    const stdout = await executeWithCleanup(
+      process.platform === 'win32' ? `ping -n 3 ${host}` : `ping -c 3 ${host}`,
+      { timeout }
+    );
+    const regexWin = /Average = ([0-9]+)ms/;
+    const regexUnix = /= ([0-9.]+)\/\d+\/\d+/;
+    let match = stdout.match(regexWin);
+    if (!match) match = stdout.match(regexUnix);
+    if (match) return parseFloat(match[1]);
+  } catch (err) {
+    console.error(`ping error for ${host}:`, err.message);
+  }
+  return null;
 }
 
 async function detectNetworkInfo(uncPath) {
@@ -103,5 +114,7 @@ module.exports = {
   detectNetworkInfo,
   applyNetworkOptimizations,
   relaunchFromTempIfNeeded,
-  registerTempCleanup
+  registerTempCleanup,
+  executeWithCleanup,
+  activeOperations
 };
