@@ -45,6 +45,12 @@ test('CacheManager atomic operations', async () => {
   fs.unlinkSync(tmp);
 });
 
+test('CacheManager handles corrupted cache', async () => {
+  fs.writeFileSync(CacheManager.CACHE_PATH, 'invalid json');
+  const cache = await CacheManager.loadCache();
+  if (Object.keys(cache).length !== 0) throw new Error('cache should be empty');
+});
+
 // NetworkOptimizer tests
 
 test('NetworkOptimizer isUNCPath', () => {

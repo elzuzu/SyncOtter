@@ -3,6 +3,7 @@ const path = require('path');
 const TransferManager = require('../TransferManager');
 const CacheManager = require('../CacheManager');
 const ErrorRecovery = require('../ErrorRecovery');
+const lockfile = require('proper-lockfile');
 
 function shouldExclude(filePath, config) {
   const rel = path.relative(config.sourceDirectory, filePath);
@@ -47,16 +48,21 @@ async function copyFileIfNeeded(file, config, cache, telemetry) {
   const targetFile = path.join(config.targetDirectory, relativePath);
   try {
     await fs.ensureDir(path.dirname(targetFile));
-    const stat = await fs.stat(file);
-    if (await fs.pathExists(targetFile)) {
-      if (!CacheManager.needsSync(file, stat, cache) && await ErrorRecovery.verifyIntegrity(file, targetFile)) {
-        return false;
+    const release = await lockfile.lock(targetFile, { retries: { retries: 3, minTimeout: 50 } });
+    try {
+      const stat = await fs.stat(file);
+      if (await fs.pathExists(targetFile)) {
+        if (!CacheManager.needsSync(file, stat, cache) && await ErrorRecovery.verifyIntegrity(file, targetFile)) {
+          return false;
+        }
       }
+      await TransferManager.transferFile(file, targetFile, { rateLimit: config.rateLimit });
+      CacheManager.updateCacheEntry(cache, file, stat);
+      if (telemetry) telemetry.recordFileCopied(stat.size);
+      return true;
+    } finally {
+      await release();
     }
-    await TransferManager.transferFile(file, targetFile, { rateLimit: config.rateLimit });
-    CacheManager.updateCacheEntry(cache, file, stat);
-    if (telemetry) telemetry.recordFileCopied(stat.size);
-    return true;
   } catch (err) {
     if (telemetry) telemetry.recordError();
     return false;
