@@ -46,8 +46,15 @@ try {
 
     # Nettoyage avancé de node_modules
     Write-Col "🧹 Nettoyage avancé de node_modules" $Yellow
-    Get-ChildItem -Path node_modules -Recurse -Directory -Filter test, tests, __tests__, doc, docs 2>$null | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    Get-ChildItem -Path node_modules -Recurse -Include *.md, *.markdown, *.ts 2>$null | Remove-Item -Force -ErrorAction SilentlyContinue
+
+    # Supprimer les dossiers de test et de documentation
+    Get-ChildItem -Path node_modules -Recurse -Directory 2>$null | Where-Object {
+        $_.Name -in @('test','tests','__tests__','doc','docs')
+    } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    # Supprimer certains fichiers inutiles
+    Get-ChildItem -Path node_modules -Recurse -File -Include '*.md','*.markdown','*.ts','*.map' 2>$null |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 
     $compressArg = if ($Compress) { '--compress Brotli' } else { '' }
     $pkgCmd = "pkg main-cli.js --targets $Target $compressArg --no-bytecode --output pkg-dist/SyncOtter-Single.exe"
