@@ -26,7 +26,10 @@ class AdvancedLogger {
       const stats = fs.statSync(this.currentFile);
       if (stats.size >= this.maxSize) {
         const rotated = this.currentFile.replace('.log', `-${Date.now()}.log`);
-        fs.renameSync(this.currentFile, rotated);
+        const temp = this.currentFile + '.rotating';
+        fs.renameSync(this.currentFile, temp);
+        fs.writeFileSync(this.currentFile, '');
+        fs.renameSync(temp, rotated);
       }
     } catch {}
   }
