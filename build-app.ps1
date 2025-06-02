@@ -230,31 +230,18 @@ function Minify-Sources {
         return
     }
     Get-ChildItem src -Recurse -Include *.js | ForEach-Object {
-        Invoke-Step "npx terser $_.FullName -c -m -o $_.FullName"
+        $path = $_.FullName
+        Invoke-Step "npx terser `"$path`" -c -m -o `"$path`""
     }
     Get-ChildItem src -Recurse -Include *.html | ForEach-Object {
-        Invoke-Step "npx html-minifier $_.FullName -o $_.FullName --collapse-whitespace --remove-comments"
+        $path = $_.FullName
+        Invoke-Step "npx html-minifier `"$path`" -o `"$path`" --collapse-whitespace --remove-comments"
     }
 }
 
 function Compress-Assets {
-    Write-ColorText "`n📦 Compression Brotli des assets..." $Yellow
-    $assetDir = "src\assets"
-    if (-not (Test-Path $assetDir)) {
-        Write-ColorText "   ⚠️ Dossier $assetDir introuvable, compression ignorée" $Yellow
-        return
-    }
-    try {
-        Get-ChildItem $assetDir -Recurse -File | ForEach-Object {
-            $dest = "$($_.FullName).br"
-            $in = [IO.File]::OpenRead($_.FullName)
-            $out = [IO.File]::Create($dest)
-            $br = New-Object IO.Compression.BrotliStream($out, [IO.Compression.CompressionLevel]::Optimal)
-            $in.CopyTo($br); $br.Dispose(); $out.Dispose(); $in.Dispose()
-        }
-    } catch {
-        Write-ColorText "   ⚠️ Compression Brotli échouée: $_" $Yellow
-    }
+    Write-ColorText "`n📦 Compression Brotli désactivée..." $Yellow
+    return
 }
 
 function Compress-Executable($exePath) {
