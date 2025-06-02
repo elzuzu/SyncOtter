@@ -1,4 +1,4 @@
-# Script de build refondé pour Indi-Suivi - Inspiré de build-app-improved-upx.ps1 
+﻿# Script de build refondé pour Indi-Suivi - Inspiré de build-app-improved-upx.ps1 
 param(
     [switch]$Clean = $true,
     [switch]$InstallDeps = $false,
@@ -188,7 +188,7 @@ try {
     }
     
     # Vérifier les fichiers critiques
-    $criticalFiles = @("package.json", "src\main.js")
+    $criticalFiles = @("package.json", "main.js")
     foreach ($file in $criticalFiles) {
         if (-not (Test-Path $file)) {
             throw "Fichier critique manquant: $file"
@@ -266,8 +266,8 @@ try {
     npx vite build --config vite.main.config.ts --mode production
     if ($LASTEXITCODE -ne 0) {
         Write-ColorText "   ❌ Échec du build main.js, utilisation du fallback" $Yellow
-        if (Test-Path "src\main.js") {
-            Copy-Item "src\main.js" ".vite\build\main.js" -Force
+        if (Test-Path "main.js") {
+            Copy-Item "main.js" ".vite\build\main.js" -Force
             Write-ColorText "   ✓ Fallback: main.js copié directement" $Yellow
         } else {
             throw "Impossible de construire main.js"
