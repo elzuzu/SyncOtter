@@ -44,15 +44,12 @@
             "x64"
           ]
         }
-      ],
-      "icon": "src/assets/app-icon.ico"
+      ]
     },
     "files": [
       "main.js",
       "splash.html",
-      "src/**/*",
-      "!src/**/*.ts",
-      "!src/**/*.map",
+      "src/preload.js",
       "CacheManager.js",
       "ErrorRecovery.js",
       "NetworkOptimizer.js",
@@ -81,7 +78,7 @@
     "portable": {
       "artifactName": "SyncOtter-Ultra.exe"
     },
-    "asar": false,
+    "asar": true,
     "asarUnpack": [
       "**/*.node"
     ]
