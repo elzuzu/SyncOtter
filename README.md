@@ -53,6 +53,13 @@ npm start
 npm start
 ```
 
+### Build single-file avec PKG
+```powershell
+cp package-pkg.json package.json
+./build-pkg.ps1
+```
+Résultat : `pkg-dist/SyncOtter-Single.exe`
+
 ### Lancement optimisé :
 ```powershell
 # Lancement direct (gestion auto des processus)

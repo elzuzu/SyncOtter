@@ -1,2 +1,5 @@
 node_modules/
 !node_modules/fs-extra
+
+pkg-dist/
+SyncOtter-Single.exe
