@@ -5,6 +5,19 @@ const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 const ErrorRecovery = require('./ErrorRecovery');
 
+async function transferFileWithCleanup(src, dest) {
+  let readStream = null;
+  let writeStream = null;
+  try {
+    readStream = fs.createReadStream(src);
+    writeStream = fs.createWriteStream(dest);
+    await pipeline(readStream, writeStream);
+  } finally {
+    if (readStream && !readStream.destroyed) readStream.destroy();
+    if (writeStream && !writeStream.destroyed) writeStream.destroy();
+  }
+}
+
 class Throttle extends Transform {
   constructor(rate) {
     super();
@@ -62,9 +75,9 @@ async function transferFile(src, dest, opts = {}) {
     } else if (stat.size > 50 * 1024 * 1024) {
       await chunkedCopy(src, dest, opts);
     } else {
-      await fs.copy(src, dest);
+      await transferFileWithCleanup(src, dest);
     }
   });
 }
 
-module.exports = { transferFile };
+module.exports = { transferFile, transferFileWithCleanup };

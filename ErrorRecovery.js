@@ -77,16 +77,16 @@ async function resumeCopy(src, dest) {
     written = destStat.size;
   }
 
-  const read = fs.createReadStream(src, { start: written });
-  const write = fs.createWriteStream(dest, { flags: written ? 'r+' : 'w', start: written });
+  let read = fs.createReadStream(src, { start: written });
+  let write = fs.createWriteStream(dest, { flags: written ? 'r+' : 'w', start: written });
 
   try {
     await new Promise((resolve, reject) => {
       read.pipe(write).on('finish', resolve).on('error', reject);
     });
   } finally {
-    read.close();
-    write.close();
+    if (read && !read.destroyed) read.destroy();
+    if (write && !write.destroyed) write.destroy();
   }
 
   const final = await fs.stat(dest);

@@ -12,6 +12,7 @@ const versionManager = require('./version-manager');
 
 // Modules d'optimisation réseau
 const NetworkOptimizer = require('./NetworkOptimizer');
+const { activeOperations } = NetworkOptimizer;
 const CacheManager = require('./CacheManager');
 const ErrorRecovery = require('./ErrorRecovery');
 const { ensureDirectories, scanSourceFiles, copyFileIfNeeded } = require('./shared/sync-core');
@@ -49,22 +50,66 @@ function safeSend(channel, data, attempt = 0) {
   }
 }
 
-let shuttingDown = false;
-async function gracefulShutdown() {
-  if (shuttingDown) return;
-  shuttingDown = true;
+let shutdownTimer = null;
+let isShuttingDown = false;
+
+function scheduleShutdown(delay = 1500) {
+  if (shutdownTimer) clearTimeout(shutdownTimer);
+  shutdownTimer = setTimeout(() => {
+    shutdownTimer = null;
+    if (config && config.executeAfterSync && fs.existsSync(config.executeAfterSync)) {
+      spawn(config.executeAfterSync, [], { detached: true, stdio: 'ignore' }).unref();
+    }
+    forceCleanShutdown();
+  }, delay);
+}
+
+async function forceCleanShutdown() {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log('🧹 Nettoyage forcé...');
+
+  if (shutdownTimer) {
+    clearTimeout(shutdownTimer);
+    shutdownTimer = null;
+  }
+
+  pendingRetries.forEach(id => clearTimeout(id));
+  pendingRetries.clear();
+
+  if (telemetry) {
+    telemetry.removeAllListeners();
+    try { telemetry.finish(); } catch {}
+    analytics.addMetrics(telemetry.metrics);
+    telemetry = null;
+  }
+
   try {
-    telemetry?.finish();
-    if (telemetry) analytics.addMetrics(telemetry.metrics);
     const health = await HealthChecker.basicReport(config);
     reportGenerator.generate({ metrics: telemetry?.metrics || {}, health });
   } catch (err) {
     console.error('Erreur lors du graceful shutdown:', err);
   }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
+
+  process.removeAllListeners();
+
+  activeOperations.forEach(proc => {
+    try { proc.kill(); } catch {}
+  });
+
+  setTimeout(() => {
+    console.log('💀 Sortie forcée');
+    process.exit(0);
+  }, 2000);
+
   app.quit();
 }
 
-ipcMain.on('request-shutdown', gracefulShutdown);
+ipcMain.on('request-shutdown', forceCleanShutdown);
 
 
 // Charger la configuration externe (optimisé)
@@ -122,7 +167,7 @@ async function loadConfig() {
       console.error('💡 Solution: Placez config.json à côté de l\'exe SyncOtter');
     }
 
-    gracefulShutdown();
+    forceCleanShutdown();
   }
 }
 
@@ -171,7 +216,7 @@ async function performSync() {
 
     if (sourceFiles.length === 0) {
       safeSend('update-status', '⚠️ Aucun fichier à synchroniser');
-      setTimeout(() => gracefulShutdown(), 2000);
+      scheduleShutdown(2000);
       return;
     }
 
@@ -220,22 +265,20 @@ async function performSync() {
     if (config.executeAfterSync && fs.existsSync(config.executeAfterSync)) {
       const appDisplayName = config.appName || path.basename(config.executeAfterSync, '.exe');
       safeSend('update-status', `🚀 Lancement: ${appDisplayName}`);
-      setTimeout(() => {
-        console.log(`🚀 Lancement: ${config.executeAfterSync}`);
-        try {
-          spawn(config.executeAfterSync, [], { detached: true });
-        } catch (e) {
-          console.error('Erreur lancement application:', e);
-        }
-        gracefulShutdown();
-      }, 1500);
+      console.log(`🚀 Lancement: ${config.executeAfterSync}`);
+      try {
+        spawn(config.executeAfterSync, [], { detached: true, stdio: 'ignore' }).unref();
+      } catch (e) {
+        console.error('Erreur lancement application:', e);
+      }
+      scheduleShutdown(1500);
     } else {
       if (config.executeAfterSync) {
         safeSend('update-status', '⚠️ Application introuvable');
       } else {
         safeSend('update-status', '✅ Synchronisation terminée');
       }
-      setTimeout(() => gracefulShutdown(), 2000);
+      scheduleShutdown(2000);
     }
 
   } catch (error) {
@@ -246,7 +289,7 @@ async function performSync() {
     analytics.addMetrics(telemetry.metrics);
     const errorHealth = await HealthChecker.basicReport(config);
     reportGenerator.generate({ metrics: telemetry.metrics, health: errorHealth });
-    setTimeout(() => gracefulShutdown(), 3000);
+    scheduleShutdown(3000);
   }
 }
 
@@ -271,17 +314,17 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  gracefulShutdown();
+  forceCleanShutdown();
 });
 
 app.on('before-quit', () => {
-  if (!shuttingDown) gracefulShutdown();
+  if (!isShuttingDown) forceCleanShutdown();
 });
 
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  gracefulShutdown();
+  forceCleanShutdown();
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {

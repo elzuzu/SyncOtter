@@ -146,6 +146,29 @@ function Invoke-IndiSuiviOptimizations {
     }
 }
 
+# Arrêt propre des processus Electron
+function Stop-ElectronProcesses {
+    Write-ColorText "   🔄 Arrêt des processus Electron..." $Yellow
+    Get-Process electron* -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $_.CloseMainWindow()
+            if (-not $_.WaitForExit(3000)) {
+                $_.Kill()
+            }
+        } catch {
+            Write-ColorText "   ⚠️ Processus résistant: $($_.ProcessName)" $Yellow
+        }
+    }
+
+    Start-Sleep -Seconds 1
+    $remaining = Get-Process electron* -ErrorAction SilentlyContinue
+    if ($remaining) {
+        Write-ColorText "   💀 Arrêt forcé des processus restants..." $Red
+        $remaining | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+}
+
 # Obtenir le répertoire racine du projet
 $projectRoot = $PSScriptRoot
 Write-ColorText "🚀 Build Indi-Suivi - Projet: $projectRoot" $Cyan
@@ -157,6 +180,20 @@ Push-Location $projectRoot
 $env:NODE_ENV = "production"
 $env:GENERATE_SOURCEMAP = "false"
 $env:SKIP_PREFLIGHT_CHECK = "true"
+
+# Valider la structure minimale attendue
+$requiredStructure = @{
+    "main.js"     = "Fichier principal Electron"
+    "package.json" = "Configuration npm"
+    "splash.html"  = "Interface utilisateur"
+}
+foreach ($item in $requiredStructure.GetEnumerator()) {
+    $itemPath = Join-Path $projectRoot $item.Key
+    if (-not (Test-Path $itemPath)) {
+        throw "Structure incorrecte: $($item.Value) manquant ($($item.Key))"
+    }
+}
+Write-ColorText "✅ Structure du projet validée" $Green
 
 try {
     # Étape 0: Vérifications préalables
@@ -183,17 +220,33 @@ try {
     if (Test-Path $iconPath) {
         Write-ColorText "   ✓ Icône trouvée: $iconPath" $Green
     } else {
+        $assetsDir = Join-Path $projectRoot "src\assets"
+        New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
+        New-Item -ItemType File -Path $iconPath -Force | Out-Null
         Write-ColorText "   ⚠️ Icône manquante: $iconPath" $Red
-        Write-ColorText "   Utilisation de l'icône par défaut Electron" $Yellow
+        Write-ColorText "   ⚠️ Création d'une icône par défaut" $Yellow
     }
-    
+
     # Vérifier les fichiers critiques
-    $criticalFiles = @("package.json", "main.js")
+    $criticalFiles = @("package.json", "main.js", "splash.html")
     foreach ($file in $criticalFiles) {
         if (-not (Test-Path $file)) {
             throw "Fichier critique manquant: $file"
         }
         Write-ColorText "   ✓ Fichier critique trouvé: $file" $Green
+    }
+
+    # Vérifier les configurations Vite
+    $viteConfigs = @("vite.main.config.ts", "vite.preload.config.ts", "vite.config.js")
+    $missingConfigs = @()
+    foreach ($config in $viteConfigs) {
+        if (-not (Test-Path (Join-Path $projectRoot $config))) { $missingConfigs += $config }
+    }
+    $useViteFallback = $false
+    if ($missingConfigs.Count -gt 0) {
+        Write-ColorText "   ⚠️ Configs Vite manquantes: $($missingConfigs -join ', ')" $Yellow
+        Write-ColorText "   🔄 Utilisation du mode fallback (copie directe)" $Yellow
+        $useViteFallback = $true
     }
     
     # Étape 1: Nettoyage
@@ -201,8 +254,8 @@ try {
         Write-ColorText "`n🧹 Nettoyage complet..." $Yellow
         
         # Arrêter tous les processus Node/Electron
-        Get-Process node*, electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
+        Stop-ElectronProcesses
+        Get-Process node* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         
         # Supprimer tous les dossiers de build
         @("out", "dist", ".vite", "release-builds", "build", ".webpack", "node_modules/.cache") | ForEach-Object {
@@ -263,11 +316,18 @@ try {
     
     # Build main.js
     Write-ColorText "   📝 Build main.js..." $Gray
-    npx vite build --config vite.main.config.ts --mode production
-    if ($LASTEXITCODE -ne 0) {
-        Write-ColorText "   ❌ Échec du build main.js, utilisation du fallback" $Yellow
+    if (-not $useViteFallback) {
+        npx vite build --config vite.main.config.ts --mode production
+        if ($LASTEXITCODE -ne 0) {
+            Write-ColorText "   ❌ Échec du build main.js, utilisation du fallback" $Yellow
+            $useViteFallback = $true
+        }
+    }
+    if ($useViteFallback) {
+        $buildDir = ".vite\build"
+        if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir -Force | Out-Null }
         if (Test-Path "main.js") {
-            Copy-Item "main.js" ".vite\build\main.js" -Force
+            Copy-Item "main.js" "$buildDir\main.js" -Force
             Write-ColorText "   ✓ Fallback: main.js copié directement" $Yellow
         } else {
             throw "Impossible de construire main.js"
@@ -276,12 +336,19 @@ try {
     
     # Build preload.js
     Write-ColorText "   📝 Build preload.js..." $Gray
-    npx vite build --config vite.preload.config.ts --mode production
-    if ($LASTEXITCODE -ne 0) {
-        Write-ColorText "   ❌ Échec du build preload.js, utilisation du fallback" $Yellow
+    if (-not $useViteFallback) {
+        npx vite build --config vite.preload.config.ts --mode production
+        if ($LASTEXITCODE -ne 0) {
+            Write-ColorText "   ❌ Échec du build preload.js, utilisation du fallback" $Yellow
+            $useViteFallback = $true
+        }
+    }
+    if ($useViteFallback) {
+        $buildDir = ".vite\build"
+        if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir -Force | Out-Null }
         if (Test-Path "src\preload.ts") {
-            npx tsc src\preload.ts --outDir .vite\build --module commonjs --target es2020 --esModuleInterop --skipLibCheck
-            if (-not (Test-Path ".vite\build\preload.js")) {
+            npx tsc src\preload.ts --outDir $buildDir --module commonjs --target es2020 --esModuleInterop --skipLibCheck
+            if (-not (Test-Path "$buildDir\preload.js")) {
                 throw "Impossible de construire preload.js"
             } else {
                 Write-ColorText "   ✓ Fallback: preload.js compilé avec tsc" $Yellow
@@ -291,9 +358,20 @@ try {
     
     # Build renderer
     Write-ColorText "   📝 Build renderer..." $Gray
-    npx vite build --config vite.config.js --mode production
-    if ($LASTEXITCODE -ne 0) {
-        throw "Échec du build renderer (React)"
+    if (-not $useViteFallback) {
+        npx vite build --config vite.config.js --mode production
+        if ($LASTEXITCODE -ne 0) {
+            Write-ColorText "   ❌ Échec du build renderer (React)" $Red
+            $useViteFallback = $true
+        }
+    }
+    if ($useViteFallback) {
+        if (Test-Path "splash.html") {
+            Copy-Item "splash.html" "dist/index.html" -Force
+            Write-ColorText "   ✓ Fallback: interface copiée" $Yellow
+        } else {
+            throw "Échec du build renderer et aucun fallback disponible"
+        }
     }
     
     # Vérifier les fichiers critiques après build
