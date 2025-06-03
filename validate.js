@@ -31,6 +31,10 @@ function listFiles(dir) {
 
 function checkPackageLock() {
   const pkg = readJson('package.json');
+  if (!fs.existsSync('package-lock.json')) {
+    log('package-lock.json missing, skipping lock check');
+    return;
+  }
   const lock = readJson('package-lock.json');
   if (!pkg || !lock) return;
   const deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
@@ -44,6 +48,10 @@ function checkPackageLock() {
 function checkInstalledDeps() {
   const pkg = readJson('package.json');
   if (!pkg) return;
+  if (!fs.existsSync('node_modules')) {
+    log('node_modules missing, skipping dependency check');
+    return;
+  }
   const deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
   for (const dep of Object.keys(deps)) {
     const dir = path.join('node_modules', dep);

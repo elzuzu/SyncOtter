@@ -1,0 +1,10 @@
+{
+  "sourceDirectory": "\\\\server\\source",
+  "targetDirectory": "C:\\Local\\Target",
+  "excludeDirectories": [".git", "node_modules", ".vs", "bin", "obj"],
+  "excludePatterns": ["*.tmp", "*.log", "Thumbs.db"],
+  "executeAfterSync": "C:\\Local\\Target\\app.exe",
+  "appName": "Mon Application",
+  "appDescription": "Synchronisation et lancement automatique",
+  "parallelCopies": 8
+}
