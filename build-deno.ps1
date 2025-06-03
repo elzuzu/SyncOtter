@@ -381,6 +381,12 @@ deno run --allow-read --allow-write --allow-run --allow-env "%~dp0SyncOtter-Bund
 
     # Résultat
     Write-Col "`n✅ Build terminé : 'deno-dist/$outputName'" $Green
+
+    # Copier les ressources du splash screen pour la version compilée
+    if (Test-Path 'web') {
+        Copy-Item -Path 'web' -Destination 'deno-dist' -Recurse -Force
+        Write-Col "📂 Dossier 'web' copié dans deno-dist" $Cyan
+    }
     
     # Créer une version sans console si demandé (Windows uniquement)
     if ($NoConsole -and $outputName.EndsWith('.exe') -and (Test-Path "deno-dist/$outputName")) {
