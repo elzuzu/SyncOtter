@@ -322,12 +322,12 @@ if (import.meta.main) {
     
     # Compilation avec gestion des erreurs TypeScript
     Write-Col "   Tentative 1 : Compilation standard..." $Yellow
-    & deno compile --output "deno-dist/$outputName" --allow-read --allow-write --allow-run --allow-env $mainFile
+    & deno compile --output "deno-dist/$outputName" --allow-all $mainFile
     
     # Si échec, essayer sans vérification de types
     if ($LASTEXITCODE -ne 0) {
         Write-Col "   Tentative 2 : Compilation avec --no-check..." $Yellow
-        & deno compile --no-check --output "deno-dist/$outputName" --allow-read --allow-write --allow-run --allow-env $mainFile
+        & deno compile --no-check --output "deno-dist/$outputName" --allow-all $mainFile
     }
     
     # Si échec, essayer avec curl pour pré-télécharger le runtime
@@ -349,12 +349,12 @@ if (import.meta.main) {
             if ($LASTEXITCODE -eq 0) {
                 Write-Col "     ✅ Runtime téléchargé avec succès" $Green
                 # Retry compilation
-                & deno compile --no-check --output "deno-dist/$outputName" --allow-read --allow-write --allow-run --allow-env $mainFile
+                & deno compile --no-check --output "deno-dist/$outputName" --allow-all $mainFile
             }
         } else {
             Write-Col "     ✅ Runtime déjà présent" $Green
             # Retry compilation
-            & deno compile --no-check --output "deno-dist/$outputName" --allow-read --allow-write --allow-run --allow-env $mainFile
+            & deno compile --no-check --output "deno-dist/$outputName" --allow-all $mainFile
         }
     }
     
