@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Clean = $true
 )
 
@@ -28,9 +28,9 @@ try {
     }
 
     Write-Col "🏗️ Compilation avec Deno..." $Yellow
-    & deno compile \
-        --output "deno-dist/SyncOtter-Single.exe" \
-        --allow-read --allow-write --allow-run --allow-env \
+    & deno compile `
+        --output "deno-dist/SyncOtter-Single.exe" `
+        --allow-read --allow-write --allow-run --allow-env `
         src/deno-main.ts
 
     if ($LASTEXITCODE -ne 0) { throw 'deno compile a échoué' }
