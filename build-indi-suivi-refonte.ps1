@@ -25,6 +25,52 @@ function Write-ColorText($Text, $Color) {
     $Host.UI.RawUI.ForegroundColor = $currentColor
 }
 
+# Téléchargement simple via curl
+function Invoke-CurlDownload {
+    param(
+        [string]$Url,
+        [string]$Destination
+    )
+
+    if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+        throw "curl n'est pas disponible dans le PATH"
+    }
+
+    Write-ColorText "   📥 Téléchargement de $Url" $Gray
+    & curl.exe -L $Url -o $Destination
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Destination)) {
+        throw "Échec du téléchargement: $Url"
+    }
+}
+
+# Prépare winCodeSign en local pour electron-builder
+function Ensure-WinCodeSign {
+    param(
+        [string]$ProjectRoot
+    )
+
+    $cacheDir = Join-Path $ProjectRoot "deps\winCodeSign"
+    if (-not (Test-Path $cacheDir)) {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    }
+
+    $archive = Join-Path $cacheDir "winCodeSign-2.6.0.7z"
+    if (-not (Test-Path $archive)) {
+        $url = "https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z"
+        Invoke-CurlDownload -Url $url -Destination $archive
+    }
+
+    $dest = Join-Path $cacheDir "winCodeSign"
+    if (-not (Test-Path $dest)) {
+        $sevenZip = "node_modules\7zip-bin\win\x64\7za.exe"
+        if (Test-Path $sevenZip) {
+            & $sevenZip x -bd -y $archive "-o$dest" | Out-Null
+        }
+    }
+
+    $env:ELECTRON_BUILDER_CACHE = $cacheDir
+}
+
 # Fonction UPX optimisée pour Indi-Suivi
 function Invoke-UPXCompression {
     param(
@@ -456,6 +502,9 @@ try {
             "--config.directories.output=dist",
             "--config.asar=true"
         )
+
+        # Préparation éventuelle des dépendances binaires
+        Ensure-WinCodeSign -ProjectRoot $projectRoot
 
         npx electron-builder @builderArgs
         if ($LASTEXITCODE -ne 0) {
