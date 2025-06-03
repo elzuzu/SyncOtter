@@ -37,7 +37,10 @@ function Invoke-CurlDownload {
     }
 
     Write-ColorText "   📥 Téléchargement de $Url" $Gray
-    & curl.exe -L $Url -o $Destination
+    # Certaines configurations Windows bloquent la vérification de révocation
+    # du certificat (erreur CRYPT_E_NO_REVOCATION_CHECK). On désactive donc
+    # cette vérification pour fiabiliser le téléchargement.
+    & curl.exe -L --ssl-no-revoke $Url -o $Destination
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Destination)) {
         throw "Échec du téléchargement: $Url"
     }
