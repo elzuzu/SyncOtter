@@ -1,5 +1,2 @@
-node_modules/
-!node_modules/fs-extra
-
-pkg-dist/
+deno-dist/
 SyncOtter-Single.exe
