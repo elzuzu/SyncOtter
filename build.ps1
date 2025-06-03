@@ -606,10 +606,10 @@ try {
     Write-ColorText "Stack trace:" $Red
     Write-ColorText $_.ScriptStackTrace $Gray
     Write-ColorText "`n🔧 Suggestions de dépannage:" $Yellow
-    Write-ColorText "1. Essayez: .\build-indi-suivi-refonte.ps1 -UseForge" $Gray
-    Write-ColorText "2. Ou bien: .\build-indi-suivi-refonte.ps1 -UsePackager" $Gray
-    Write-ColorText "3. Ou encore: .\build-indi-suivi-refonte.ps1 -InstallDeps -Clean" $Gray
-    Write-ColorText "4. Ou encore: .\build-indi-suivi-refonte.ps1 -SkipNativeDeps" $Gray
+    Write-ColorText "1. Essayez: .\build.ps1 -UseForge" $Gray
+    Write-ColorText "2. Ou bien: .\build.ps1 -UsePackager" $Gray
+    Write-ColorText "3. Ou encore: .\build.ps1 -InstallDeps -Clean" $Gray
+    Write-ColorText "4. Ou encore: .\build.ps1 -SkipNativeDeps" $Gray
     Write-ColorText "5. Vérifiez les fichiers de configuration Vite" $Gray
     exit 1
 } finally {
