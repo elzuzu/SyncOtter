@@ -252,7 +252,7 @@ $env:SKIP_PREFLIGHT_CHECK = "true"
 $requiredStructure = @{
     "main.js"     = "Fichier principal Electron"
     "package.json" = "Configuration npm"
-    "splash.html"  = "Interface utilisateur"
+    "web/splash.html"  = "Interface utilisateur"
 }
 foreach ($item in $requiredStructure.GetEnumerator()) {
     $itemPath = Join-Path $projectRoot $item.Key
@@ -295,7 +295,7 @@ try {
     }
 
     # Vérifier les fichiers critiques
-    $criticalFiles = @("package.json", "main.js", "splash.html")
+    $criticalFiles = @("package.json", "main.js", "web/splash.html")
     foreach ($file in $criticalFiles) {
         if (-not (Test-Path $file)) {
             throw "Fichier critique manquant: $file"
@@ -433,8 +433,8 @@ try {
         }
     }
     if ($useViteFallback) {
-        if (Test-Path "splash.html") {
-            Copy-Item "splash.html" "dist/index.html" -Force
+        if (Test-Path "web/splash.html") {
+            Copy-Item "web/splash.html" "dist/index.html" -Force
             Write-ColorText "   ✓ Fallback: interface copiée" $Yellow
         } else {
             throw "Échec du build renderer et aucun fallback disponible"
@@ -606,10 +606,10 @@ try {
     Write-ColorText "Stack trace:" $Red
     Write-ColorText $_.ScriptStackTrace $Gray
     Write-ColorText "`n🔧 Suggestions de dépannage:" $Yellow
-    Write-ColorText "1. Essayez: .\build-indi-suivi-refonte.ps1 -UseForge" $Gray
-    Write-ColorText "2. Ou bien: .\build-indi-suivi-refonte.ps1 -UsePackager" $Gray
-    Write-ColorText "3. Ou encore: .\build-indi-suivi-refonte.ps1 -InstallDeps -Clean" $Gray
-    Write-ColorText "4. Ou encore: .\build-indi-suivi-refonte.ps1 -SkipNativeDeps" $Gray
+    Write-ColorText "1. Essayez: .\build.ps1 -UseForge" $Gray
+    Write-ColorText "2. Ou bien: .\build.ps1 -UsePackager" $Gray
+    Write-ColorText "3. Ou encore: .\build.ps1 -InstallDeps -Clean" $Gray
+    Write-ColorText "4. Ou encore: .\build.ps1 -SkipNativeDeps" $Gray
     Write-ColorText "5. Vérifiez les fichiers de configuration Vite" $Gray
     exit 1
 } finally {

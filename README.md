@@ -40,14 +40,14 @@ node config-generator.js
 npm start
 
 # 4. Compiler l'exécutable
-.\build-indi-suivi-refonte.ps1
+.\build.ps1
 > **Note** : lancez ce script depuis le dossier `SyncOtter` pour que les chemins soient correctement résolus.
 ```
 
 ### Compilation express :
 ```powershell
 # Build complet
-.\build-indi-suivi-refonte.ps1
+.\build.ps1
 
 # Test développement
 npm start
@@ -108,7 +108,7 @@ npm start
 ## 🎯 Utilisation Type Share Réseau
 
 ### **Approche Simple :**
-1. **Build une fois** : `.\build-indi-suivi-refonte.ps1`
+1. **Build une fois** : `.\build.ps1`
 2. **Copier l'exécutable** sur votre partage réseau
 3. **Lancer depuis poste** : `\\server\tools\SyncOtter\Indi-Suivi.exe`
 
@@ -123,7 +123,7 @@ npm start
 
 ```powershell
 # BUILD
-.\build-indi-suivi-refonte.ps1  # Build complet
+.\build.ps1  # Build complet
 npm start        # Mode développement
 
 # LANCEMENT

@@ -1,2 +1,7 @@
 deno-dist/
 SyncOtter-Single.exe
+node_modules/
+dist/
+logs/
+reports/
+*.log

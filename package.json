@@ -6,7 +6,7 @@
   "author": "SyncOtter Team",
   "scripts": {
     "start": "electron .",
-    "build": "pwsh ./build-indi-suivi-refonte.ps1",
+    "build": "pwsh ./build.ps1",
     "clean": "rimraf dist build out release-builds .vite node_modules/.cache",
     "reinstall": "npm run clean && npm install --legacy-peer-deps"
   },
@@ -50,7 +50,7 @@
     },
     "files": [
       "main.js",
-      "splash.html",
+      "web/splash.html",
       "src/preload.js",
       "CacheManager.js",
       "ErrorRecovery.js",

@@ -190,7 +190,7 @@ function createSplashWindow() {
       preload: path.join(__dirname, 'src', 'preload.js')
     }
   });
-  mainWindow.loadFile(path.join(__dirname, 'splash.html'));
+  mainWindow.loadFile(path.join(__dirname, 'web', 'splash.html'));
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
