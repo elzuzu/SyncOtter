@@ -84,7 +84,7 @@ function checkRequirePaths() {
 
 function checkAssets() {
   const requiredAssets = [
-    'splash.html',
+    'web/splash.html',
     'config.exemple.json',
     'src/preload.ts',
     'src/cli-main.js'

@@ -252,7 +252,7 @@ $env:SKIP_PREFLIGHT_CHECK = "true"
 $requiredStructure = @{
     "main.js"     = "Fichier principal Electron"
     "package.json" = "Configuration npm"
-    "splash.html"  = "Interface utilisateur"
+    "web/splash.html"  = "Interface utilisateur"
 }
 foreach ($item in $requiredStructure.GetEnumerator()) {
     $itemPath = Join-Path $projectRoot $item.Key
@@ -295,7 +295,7 @@ try {
     }
 
     # Vérifier les fichiers critiques
-    $criticalFiles = @("package.json", "main.js", "splash.html")
+    $criticalFiles = @("package.json", "main.js", "web/splash.html")
     foreach ($file in $criticalFiles) {
         if (-not (Test-Path $file)) {
             throw "Fichier critique manquant: $file"
@@ -433,8 +433,8 @@ try {
         }
     }
     if ($useViteFallback) {
-        if (Test-Path "splash.html") {
-            Copy-Item "splash.html" "dist/index.html" -Force
+        if (Test-Path "web/splash.html") {
+            Copy-Item "web/splash.html" "dist/index.html" -Force
             Write-ColorText "   ✓ Fallback: interface copiée" $Yellow
         } else {
             throw "Échec du build renderer et aucun fallback disponible"

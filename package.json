@@ -50,7 +50,7 @@
     },
     "files": [
       "main.js",
-      "splash.html",
+      "web/splash.html",
       "src/preload.js",
       "CacheManager.js",
       "ErrorRecovery.js",
