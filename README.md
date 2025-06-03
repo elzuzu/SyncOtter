@@ -5,12 +5,13 @@ SyncOtter est un outil de synchronisation simplifié pouvant être compilé avec
 ## 🚀 Utilisation rapide
 
 1. Placez votre configuration dans `config.json` à côté de l'exécutable.
-2. Compilez l'outil :
+2. Compilez l'outil (optionnellement avec `-NoConsole` pour masquer la fenêtre terminal) :
    ```powershell
-   ./build-deno.ps1
+   ./build-deno.ps1 -NoConsole
    ```
-   Le binaire est généré dans `deno-dist/SyncOtter-Single.exe`.
-3. Lancez l'exécutable pour démarrer la synchronisation.
+   Le binaire et le dossier `web` sont générés dans `deno-dist`.
+3. Copiez `config.json` **et** le dossier `web` à côté de l'exécutable.
+4. Lancez l'exécutable pour démarrer la synchronisation.
 
 ## Exemple de `config.json`
 
