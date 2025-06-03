@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncOtter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 400px;
+            height: 320px; /* Correspond maintenant à la fenêtre */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center; /* Centrage vertical parfait */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            padding: 20px; /* Ajout de padding pour éviter que les éléments touchent les bords */
+            box-sizing: border-box;
+        }
+
+        .otter-container {
+            margin-bottom: 15px; /* Réduit de 20px à 15px */
+            position: relative;
+            flex-shrink: 0; /* Empêche la compression */
+        }
+
+        .otter {
+            font-size: 48px;
+            animation: float 2s ease-in-out infinite;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .app-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px; /* Réduit de 10px à 8px */
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        .status-text {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 15px; /* Réduit de 20px à 15px */
+            text-align: center;
+            min-height: 20px;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .status-text.warning {
+            color: #ffd700;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-text.success {
+            color: #4ade80;
+        }
+
+        .status-text.error {
+            color: #f87171;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.6; }
+        }
+
+        .app-info {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px; /* Réduit de 15px à 12px */
+            margin: 10px 0; /* Réduit de 15px à 10px */
+            border: 1px solid rgba(255,255,255,0.2);
+            min-height: 45px; /* Réduit de 50px à 45px */
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: translateY(10px);
+            flex-shrink: 0;
+        }
+
+        .app-info.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .app-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .app-description {
+            font-size: 12px;
+            opacity: 0.8;
+            color: #e0e7ff;
+        }
+
+        .launch-icon {
+            font-size: 14px;
+            animation: rocket 2s ease-in-out infinite;
+        }
+
+        @keyframes rocket {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-3px); }
+        }
+
+        .progress-container {
+            width: 300px;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 10px 0 8px 0; /* Réduit les marges */
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .progress-container.visible {
+            opacity: 1;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.2s ease;
+            position: relative;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+
+        .progress-details {
+            font-size: 11px;
+            opacity: 0.8;
+            text-align: center;
+            min-height: 15px;
+        }
+
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            animation: bubble-rise 4s infinite ease-in-out;
+        }
+
+        .bubble1 { width: 20px; height: 20px; left: 10%; animation-delay: 0s; }
+        .bubble2 { width: 15px; height: 15px; left: 20%; animation-delay: 1s; }
+        .bubble3 { width: 25px; height: 25px; right: 15%; animation-delay: 2s; }
+
+        @keyframes bubble-rise {
+            0% {
+                transform: translateY(350px) scale(0); /* Augmenté de 300px à 350px */
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.6;
+            }
+            90% {
+                opacity: 0.6;
+            }
+            100% {
+                transform: translateY(-30px) scale(1); /* Changé de -50px à -30px */
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bubble bubble1"></div>
+    <div class="bubble bubble2"></div>
+    <div class="bubble bubble3"></div>
+    
+    <div class="otter-container">
+        <div class="otter">🦦</div>
+    </div>
+    
+    <div class="app-title">SyncOtter</div>
+    <div class="status-text" id="status">Initialisation...</div>
+    
+    <div class="app-info" id="appInfo">
+        <div class="app-name" id="appName">
+            <span class="launch-icon">🚀</span>
+            <span id="appNameText">Application</span>
+        </div>
+        <div class="app-description" id="appDescription">Prêt pour le lancement</div>
+    </div>
+    
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+    
+    <div class="progress-details" id="progressDetails"></div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const api = (window as any).electronAPI;
+            if (!api) {
+                console.error('Electron API non disponible');
+                document.getElementById('status').textContent = 'Erreur: API indisponible';
+                return;
+            }
+
+            const statusEl = document.getElementById('status');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressDetails = document.getElementById('progressDetails');
+            const appInfo = document.getElementById('appInfo');
+            const appNameText = document.getElementById('appNameText');
+            const appDescription = document.getElementById('appDescription');
+
+            const safeOn = (channel, handler) => {
+                try {
+                    api.on(channel, (data) => {
+                        try { handler(data); } catch (err) { console.error('Handler error', err); }
+                    });
+                } catch (err) {
+                    console.error('Erreur ajout listener', err);
+                }
+            };
+
+            safeOn('app-info', (data) => {
+                if (data.appName) {
+                    appNameText.textContent = data.appName;
+                    appDescription.textContent = data.appDescription || 'Prêt pour le lancement';
+                    appInfo.classList.add('visible');
+                } else if (data.executeAfterSync) {
+                    const exeName = data.executeAfterSync.split('\\').pop().replace('.exe', '');
+                    appNameText.textContent = exeName;
+                    appDescription.textContent = 'Application détectée automatiquement';
+                    appInfo.classList.add('visible');
+                }
+            });
+
+            safeOn('update-status', (message) => {
+                statusEl.textContent = message;
+                statusEl.className = 'status-text';
+                if (message.includes('❌') || message.includes('Erreur')) {
+                    statusEl.classList.add('error');
+                } else if (message.includes('✅') || message.includes('Terminé')) {
+                    statusEl.classList.add('success');
+                } else if (message.includes('⚠️') || message.includes('fermé') || message.includes('Aucun')) {
+                    statusEl.classList.add('warning');
+                }
+            });
+
+            safeOn('update-progress', (data) => {
+                progressContainer.classList.add('visible');
+                progressBar.style.width = data.progress + '%';
+                statusEl.textContent = 'Synchronisation en cours...';
+                progressDetails.textContent = `${data.current}/${data.total} • ${data.fileName} • ${data.copied} copiés`;
+                if (data.progress >= 100) {
+                    statusEl.textContent = `✅ Terminé ! ${data.copied} fichiers synchronisés`;
+                    progressDetails.textContent = '';
+                }
+            });
+
+            safeOn('telemetry-summary', (data) => {
+                const summary = `Temps: ${Math.round(data.durationMs/1000)}s • Fichiers: ${data.filesCopied} • Erreurs: ${data.errors}`;
+                const summaryEl = document.createElement('div');
+                summaryEl.textContent = summary;
+                summaryEl.style.fontSize = '12px';
+                summaryEl.style.marginTop = '8px';
+                document.body.appendChild(summaryEl);
+            });
+        });
+    </script>
+</body>
+</html>

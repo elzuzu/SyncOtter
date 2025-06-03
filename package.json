@@ -1,0 +1,92 @@
+{
+  "name": "syncotter",
+  "version": "1.0.0",
+  "description": "Outil de synchronisation intelligent avec loutre",
+  "main": "main.js",
+  "author": "SyncOtter Team",
+  "scripts": {
+    "start": "electron .",
+    "build": "pwsh ./build-indi-suivi-refonte.ps1",
+    "clean": "rimraf dist build out release-builds .vite node_modules/.cache",
+    "reinstall": "npm run clean && npm install --legacy-peer-deps"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "@electron/packager": "^18.3.6",
+    "typescript": "^5.0.0",
+    "@types/node": "^18.0.0",
+    "rimraf": "^5.0.0",
+    "webpack": "^5.89.0",
+    "compression-webpack-plugin": "^10.0.0"
+  },
+  "dependencies": {
+    "fs-extra": "^11.2.0",
+    "ajv": "^8.12.0",
+    "proper-lockfile": "^4.1.2",
+    "yargs": "^17.7.2",
+    "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0"
+  },
+  "build": {
+    "appId": "com.syncotter.app",
+    "productName": "SyncOtter",
+    "compression": "maximum",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "sign": false,
+      "verifyUpdateCodeSignature": false
+    },
+    "files": [
+      "main.js",
+      "splash.html",
+      "src/preload.js",
+      "CacheManager.js",
+      "ErrorRecovery.js",
+      "NetworkOptimizer.js",
+      "TransferManager.js",
+      "monitoring/**/*",
+      "logger/**/*",
+      "version-manager.js",
+      "node_modules/fs-extra/**/*",
+      "!node_modules/.bin",
+      "!node_modules/**/*.md",
+      "!**/*.md",
+      "!build.*",
+      "!launch.*",
+      "!*.ps1",
+      "!*.bat"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "SyncOtter-Ultra.exe"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ]
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}

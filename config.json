@@ -1,21 +1,22 @@
 {
-  "sourceDirectory": "C:\\Source",
-  "targetDirectory": "C:\\Target",
+  "sourceDirectory": "S:\\UO3343\\05_FINANCES\\02_Debiteurs\\01_dettes_avs_ai\\16_suivi_deb\\APP\\SuiviDebiteurs",
+  "targetDirectory": "D:\\SuiviDebiteurs",
   "excludeDirectories": [
     ".git",
     "node_modules", 
     ".vs",
     "bin",
     "obj",
-    "temp"
+    "temp",
+	"db"
   ],
   "excludePatterns": [
     "*.tmp",
     "*.log",
     "Thumbs.db"
   ],
-  "executeAfterSync": "C:\\Target\\app.exe",
-  "appName": "Mon Application",
+  "executeAfterSync": "D:\\SuiviDebiteurs\\Indi-Suivi.exe",
+  "appName": "Suivi des débiteurs PCAVSAI",
   "appDescription": "Synchronisation et lancement automatique",
   "parallelCopies": 4,
   "telemetryGranularity": "summary"
