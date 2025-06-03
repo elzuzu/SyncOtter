@@ -1,4 +1,4 @@
-﻿# Script de build refondé pour Indi-Suivi - Inspiré de build-app-improved-upx.ps1 
+# Script de build refondé pour Indi-Suivi - Inspiré de build-app-improved-upx.ps1 
 param(
     [switch]$Clean = $true,
     [switch]$InstallDeps = $false,
