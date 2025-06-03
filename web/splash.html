@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncOtter</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{width:400px;height:320px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;color:white;border-radius:20px;overflow:hidden;position:relative;padding:20px;box-sizing:border-box}
+    .otter-container{margin-bottom:15px;position:relative;flex-shrink:0}
+    .otter{font-size:48px;animation:float 2s ease-in-out infinite;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.3))}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    .app-title{font-size:24px;font-weight:600;margin-bottom:8px;text-shadow:0 2px 4px rgba(0,0,0,0.3);flex-shrink:0}
+    .status-text{font-size:14px;opacity:0.9;margin-bottom:15px;text-align:center;min-height:20px;transition:all 0.3s ease;flex-shrink:0}
+    .status-text.warning{color:#ffd700;animation:pulse 1.5s infinite}
+    .status-text.success{color:#4ade80}
+    .status-text.error{color:#f87171}
+    @keyframes pulse{0%,100%{opacity:0.9}50%{opacity:0.6}}
+    .app-info{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border-radius:12px;padding:12px;margin:10px 0;border:1px solid rgba(255,255,255,0.2);min-height:45px;transition:all 0.3s ease;opacity:0;transform:translateY(10px);flex-shrink:0}
+    .app-info.visible{opacity:1;transform:translateY(0)}
+    .app-name{font-size:16px;font-weight:600;color:#fff;margin-bottom:5px;display:flex;align-items:center;gap:8px}
+    .app-description{font-size:12px;opacity:0.8;color:#e0e7ff}
+    .launch-icon{font-size:14px;animation:rocket 2s ease-in-out infinite}
+    @keyframes rocket{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+    .progress-container{width:300px;height:6px;background:rgba(255,255,255,0.2);border-radius:3px;overflow:hidden;margin:10px 0 8px 0;opacity:0;transition:opacity 0.3s ease;flex-shrink:0}
+    .progress-container.visible{opacity:1}
+    .progress-bar{height:100%;background:linear-gradient(90deg,#4facfe 0%,#00f2fe 100%);width:0%;transition:width 0.2s ease;position:relative}
+    .progress-bar::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4),transparent);animation:shimmer 1.5s infinite}
+    @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+    .progress-details{font-size:11px;opacity:0.8;text-align:center;min-height:15px}
+    .bubble{position:absolute;border-radius:50%;background:rgba(255,255,255,0.1);animation:bubble-rise 4s infinite ease-in-out}
+    .bubble1{width:20px;height:20px;left:10%;animation-delay:0s}
+    .bubble2{width:15px;height:15px;left:20%;animation-delay:1s}
+    .bubble3{width:25px;height:25px;right:15%;animation-delay:2s}
+    @keyframes bubble-rise{0%{transform:translateY(350px) scale(0);opacity:0}10%{opacity:0.6}90%{opacity:0.6}100%{transform:translateY(-30px) scale(1);opacity:0}}
+  </style>
+</head>
+<body>
+<div class="bubble bubble1"></div>
+<div class="bubble bubble2"></div>
+<div class="bubble bubble3"></div>
+<div class="otter-container"><div class="otter">🦦</div></div>
+<div class="app-title">SyncOtter</div>
+<div class="status-text" id="status">Initialisation...</div>
+<div class="app-info" id="appInfo">
+  <div class="app-name" id="appName">
+    <span class="launch-icon">🚀</span>
+    <span id="appNameText">Application</span>
+  </div>
+  <div class="app-description" id="appDescription">Prêt pour le lancement</div>
+</div>
+<div class="progress-container" id="progressContainer"><div class="progress-bar" id="progressBar"></div></div>
+<div class="progress-details" id="progressDetails"></div>
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const params=new URLSearchParams(location.search);
+    const wsport=params.get('ws');
+    if(!wsport){document.getElementById('status').textContent='Erreur de connexion';return;}
+    const ws=new WebSocket('ws://localhost:'+wsport+'/');
+    const statusEl=document.getElementById('status');
+    const progressContainer=document.getElementById('progressContainer');
+    const progressBar=document.getElementById('progressBar');
+    const progressDetails=document.getElementById('progressDetails');
+    const appInfo=document.getElementById('appInfo');
+    const appNameText=document.getElementById('appNameText');
+    const appDescription=document.getElementById('appDescription');
+    ws.onmessage=(ev)=>{
+      let msg;try{msg=JSON.parse(ev.data);}catch{return;}
+      if(msg.type==='app-info'){
+        if(msg.appName){appNameText.textContent=msg.appName;}
+        if(msg.appDescription){appDescription.textContent=msg.appDescription;}
+        appInfo.classList.add('visible');
+      }
+      if(msg.type==='update-status'){
+        statusEl.textContent=msg.message;
+        statusEl.className='status-text';
+        if(msg.level==='error')statusEl.classList.add('error');
+        if(msg.level==='success')statusEl.classList.add('success');
+        if(msg.level==='warning')statusEl.classList.add('warning');
+      }
+      if(msg.type==='update-progress'){
+        progressContainer.classList.add('visible');
+        progressBar.style.width=msg.progress+'%';
+        progressDetails.textContent=msg.detail||'';
+        if(msg.progress>=100){statusEl.classList.add('success');}
+      }
+      if(msg.type==='telemetry-summary'){
+        const summary=document.createElement('div');
+        summary.textContent='Temps: '+msg.duration+'s • Fichiers: '+msg.filesCopied+' • Erreurs: '+msg.errors;
+        summary.style.fontSize='12px';
+        summary.style.marginTop='8px';
+        document.body.appendChild(summary);
+      }
+    };
+  });
+</script>
+</body>
+</html>
